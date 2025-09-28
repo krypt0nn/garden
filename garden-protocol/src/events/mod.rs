@@ -41,6 +41,21 @@ pub trait Event {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum EventsError {
+    #[error("provided event bytes slice is too short")]
+    SliceTooShort,
+
+    #[error("unknown event: {0}")]
+    UnknownEvent(u16),
+
+    #[error(transparent)]
+    CreateCommunity(#[from] CreateCommunityEventError),
+
+    #[error(transparent)]
+    CreateCommunityPost(#[from] CreateCommunityPostEventError)
+}
+
 /// Event is the main component of the garden protocol. It encodes some action
 /// performed in the network, stored as flowerpot blockchain transaction.
 #[derive(Debug, Clone)]
@@ -82,5 +97,45 @@ impl Events {
                 buf.into_boxed_slice()
             }
         }
+    }
+
+    pub fn from_bytes(event: impl AsRef<[u8]>) -> Result<Self, EventsError> {
+        let event = event.as_ref();
+
+        if event.len() < 2 {
+            return Err(EventsError::SliceTooShort);
+        }
+
+        let id = u16::from_le_bytes([event[0], event[1]]);
+
+        match id {
+            Self::V1_CREATE_COMMUNITY => {
+                Ok(Self::CreateCommunity(
+                    CreateCommunityEvent::from_bytes(&event[2..])?
+                ))
+            }
+
+            Self::V1_CREATE_COMMUNITY_POST => {
+                Ok(Self::CreateCommunityPost(
+                    CreateCommunityPostEvent::from_bytes(&event[2..])?
+                ))
+            }
+
+            _ => Err(EventsError::UnknownEvent(id))
+        }
+    }
+}
+
+impl From<CreateCommunityEvent> for Events {
+    #[inline(always)]
+    fn from(value: CreateCommunityEvent) -> Self {
+        Self::CreateCommunity(value)
+    }
+}
+
+impl From<CreateCommunityPostEvent> for Events {
+    #[inline(always)]
+    fn from(value: CreateCommunityPostEvent) -> Self {
+        Self::CreateCommunityPost(value)
     }
 }

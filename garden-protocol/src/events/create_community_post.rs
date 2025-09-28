@@ -63,6 +63,21 @@ impl CreateCommunityPostEvent {
         }
     }
 
+    #[inline(always)]
+    pub const fn community_address(&self) -> &BlockchainAddress {
+        &self.community_address
+    }
+
+    #[inline(always)]
+    pub const fn title(&self) -> &PrintableText {
+        &self.title
+    }
+
+    #[inline(always)]
+    pub const fn body(&self) -> &PrintableText {
+        &self.body
+    }
+
     fn size(&self) -> usize {
         BlockchainAddress::SIZE +
             2 + self.title.len() +

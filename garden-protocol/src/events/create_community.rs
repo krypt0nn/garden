@@ -45,6 +45,11 @@ impl CreateCommunityEvent {
             name: name.into()
         }
     }
+
+    #[inline(always)]
+    pub const fn name(&self) -> &Name {
+        &self.name
+    }
 }
 
 impl Event for CreateCommunityEvent {

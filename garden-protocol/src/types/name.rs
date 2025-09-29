@@ -53,6 +53,13 @@ impl Name {
     }
 }
 
+impl From<Name> for String {
+    #[inline(always)]
+    fn from(value: Name) -> Self {
+        value.0
+    }
+}
+
 impl AsRef<Name> for Name {
     #[inline(always)]
     fn as_ref(&self) -> &Name {

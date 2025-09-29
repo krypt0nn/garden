@@ -23,12 +23,14 @@ use rusqlite::Connection;
 use spin::Mutex;
 
 use libflowerpot::crypto::hash::Hash;
+use libflowerpot::transaction::Transaction;
 use libflowerpot::block::BlockContent;
 use libflowerpot::storage::Storage;
 
 use garden_protocol::events::{Events, EventsError};
 
 pub mod community;
+pub mod community_post;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError<S: Storage> {
@@ -43,6 +45,27 @@ pub enum DatabaseError<S: Storage> {
 
     #[error("failed to verify transaction signature: {0}")]
     VerifySignature(String)
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum QueryDatabaseError<S: Storage> {
+    #[error("storage error: {0}")]
+    Storage(#[source] S::Error),
+
+    #[error("the following block is missing: {0}")]
+    MissingBlock(Hash),
+
+    #[error("asked blockchain block {block} missing transaction {transaction}")]
+    MissingTransaction {
+        block: Hash,
+        transaction: Hash
+    },
+
+    #[error("invalid event in the asked blockchain address: block {block}, transaction {transaction}")]
+    InvalidEvent {
+        block: Hash,
+        transaction: Hash
+    }
 }
 
 /// Garden protocol database.
@@ -68,9 +91,10 @@ pub enum DatabaseError<S: Storage> {
 /// This architecture also natively supports soft history modifications
 /// handling. Since we reference blockchain storage and don't store any data -
 /// if blockchain changes at any point we won't have desync issues.
+#[derive(Debug, Clone)]
 pub struct Database<S: Storage> {
-    storage: S,
-    index: Arc<Mutex<Connection>>
+    pub(crate) storage: S,
+    pub(crate) index: Arc<Mutex<Connection>>
 }
 
 impl<S: Storage> Database<S> {
@@ -100,14 +124,19 @@ impl<S: Storage> Database<S> {
             );
 
             CREATE TABLE IF NOT EXISTS create_community_post (
-                block       BLOB NOT NULL,
-                transaction BLOB NOT NULL,
-                author      BLOB NOT NULL,
-                timestamp   INTEGER NOT NULL,
+                community_block       BLOB NOT NULL,
+                community_transaction BLOB NOT NULL,
+                post_block            BLOB NOT NULL,
+                post_transaction      BLOB NOT NULL,
+                post_author           BLOB NOT NULL,
+                post_timestamp        INTEGER NOT NULL,
 
-                UNIQUE (block, transaction),
+                UNIQUE (post_block, post_transaction),
 
-                FOREIGN KEY (block) REFERENCES handled_blocks (hash)
+                FOREIGN KEY (community_block) REFERENCES handled_blocks (hash)
+                ON DELETE CASCADE,
+
+                FOREIGN KEY (post_block) REFERENCES handled_blocks (hash)
                 ON DELETE CASCADE
             );
         "#)?;
@@ -118,7 +147,41 @@ impl<S: Storage> Database<S> {
         })
     }
 
-    /// Check if blockchain block is handled.
+    /// Query transaction from the database storage.
+    pub fn query_transaction(
+        &self,
+        block: impl AsRef<Hash>,
+        transaction: impl AsRef<Hash>
+    ) -> Result<Transaction, QueryDatabaseError<S>> {
+        let block_hash = block.as_ref();
+        let transaction_hash = transaction.as_ref();
+
+        let block = self.storage.read_block(block_hash)
+            .map_err(QueryDatabaseError::Storage)?;
+
+        let Some(block) = block else {
+            return Err(QueryDatabaseError::MissingBlock(*block_hash));
+        };
+
+        let BlockContent::Transactions(transactions) = block.content() else {
+            return Err(QueryDatabaseError::MissingTransaction {
+                block: *block_hash,
+                transaction: *transaction_hash
+            });
+        };
+
+        transactions.iter()
+            .find(|transaction| &transaction.hash() == transaction_hash)
+            .cloned()
+            .ok_or_else(|| {
+                QueryDatabaseError::MissingTransaction {
+                    block: *block_hash,
+                    transaction: *transaction_hash
+                }
+            })
+    }
+
+    /// Check if blockchain block is handled in the index.
     pub fn is_handled(
         &self,
         block: impl AsRef<Hash>
@@ -220,8 +283,7 @@ impl<S: Storage> Database<S> {
     /// Get iterator over all the stored communities.
     pub fn communities(&self) -> community::CommunityIter<S> {
         community::CommunityIter {
-            storage: self.storage.clone(),
-            index: self.index.clone(),
+            database: self.clone(),
             last_rowid: 0
         }
     }

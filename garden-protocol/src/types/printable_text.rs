@@ -43,6 +43,13 @@ impl PrintableText {
     }
 }
 
+impl From<PrintableText> for String {
+    #[inline(always)]
+    fn from(value: PrintableText) -> Self {
+        value.0
+    }
+}
+
 impl AsRef<PrintableText> for PrintableText {
     #[inline(always)]
     fn as_ref(&self) -> &PrintableText {

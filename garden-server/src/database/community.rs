@@ -16,37 +16,31 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use std::borrow::Cow;
 
-use rusqlite::Connection;
-use spin::Mutex;
 use time::UtcDateTime;
 
 use libflowerpot::crypto::hash::Hash;
 use libflowerpot::crypto::sign::VerifyingKey;
 use libflowerpot::storage::Storage;
 
+use garden_protocol::types::Name;
+use garden_protocol::events::{Events, CreateCommunityEvent};
+
+use super::{Database, QueryDatabaseError};
+use super::community_post::CommunityPostsIter;
+
 #[derive(Debug, Clone)]
 pub struct Community<S: Storage> {
-    storage: S,
-    index: Arc<Mutex<Connection>>,
-    block: Hash,
-    transaction: Hash,
-    author: VerifyingKey,
-    timestamp: UtcDateTime
+    pub(super) database: Database<S>,
+    pub(super) block: Hash,
+    pub(super) transaction: Hash,
+    pub(super) author: VerifyingKey,
+    pub(super) timestamp: UtcDateTime,
+    pub(super) event: Option<CreateCommunityEvent>
 }
 
 impl<S: Storage> Community<S> {
-    #[inline(always)]
-    pub const fn storage(&self) -> &S {
-        &self.storage
-    }
-
-    #[inline(always)]
-    pub const fn index(&self) -> &Arc<Mutex<Connection>> {
-        &self.index
-    }
-
     /// Hash of block where this community was created.
     #[inline(always)]
     pub const fn block(&self) -> &Hash {
@@ -70,13 +64,71 @@ impl<S: Storage> Community<S> {
     pub const fn timestamp(&self) -> &UtcDateTime {
         &self.timestamp
     }
+
+    /// Prefetch event from the blockchain storage.
+    pub fn prefetch_event(&mut self) -> Result<&mut Self, QueryDatabaseError<S>> {
+        if self.event.is_some() {
+            return Ok(self);
+        }
+
+        let transaction = self.database.query_transaction(
+            self.block,
+            self.transaction
+        )?;
+
+        let Ok(Events::CreateCommunity(event)) = Events::from_bytes(transaction.data()) else {
+            return Err(QueryDatabaseError::InvalidEvent {
+                block: self.block,
+                transaction: self.transaction
+            });
+        };
+
+        self.event = Some(event);
+
+        Ok(self)
+    }
+
+    fn query_event(&self) -> Result<Cow<'_, CreateCommunityEvent>, QueryDatabaseError<S>> {
+        match &self.event {
+            Some(event) => Ok(Cow::Borrowed(event)),
+            None => {
+                let transaction = self.database.query_transaction(
+                    self.block,
+                    self.transaction
+                )?;
+
+                let Ok(Events::CreateCommunity(event)) = Events::from_bytes(transaction.data()) else {
+                    return Err(QueryDatabaseError::InvalidEvent {
+                        block: self.block,
+                        transaction: self.transaction
+                    });
+                };
+
+                Ok(Cow::Owned(event))
+            }
+        }
+    }
+
+    /// Try to query name of the community from the blockchain storage.
+    pub fn query_name(&self) -> Result<Name, QueryDatabaseError<S>> {
+        Ok(self.query_event()?.name().clone())
+    }
+
+    /// Get iterator over all the stored community posts.
+    pub fn posts(&self) -> CommunityPostsIter<S> {
+        CommunityPostsIter {
+            database: self.database.clone(),
+            community_block: self.block,
+            community_transaction: self.transaction,
+            last_rowid: 0
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct CommunityIter<S: Storage> {
-    pub(super) storage: S,
-    pub(super) index: Arc<Mutex<Connection>>,
-    pub(super) last_rowid: u64
+    pub(crate) database: Database<S>,
+    pub(crate) last_rowid: u64
 }
 
 impl<S: Storage> Iterator for CommunityIter<S> {
@@ -86,7 +138,7 @@ impl<S: Storage> Iterator for CommunityIter<S> {
         // TODO: respect deleted communities once they will be supported.
 
         loop {
-            let (rowid, block, transaction, author, timestamp) = self.index.lock()
+            let (rowid, block, transaction, author, timestamp) = self.database.index.lock()
                 .prepare_cached("
                     SELECT rowid, block, transaction, author, timestamp
                     FROM create_community
@@ -108,14 +160,14 @@ impl<S: Storage> Iterator for CommunityIter<S> {
 
             let block = Hash::from(block);
 
-            if self.storage.has_block(&block).ok()? {
+            if self.database.storage.has_block(&block).ok()? {
                 return Some(Community {
-                    storage: self.storage.clone(),
-                    index: self.index.clone(),
+                    database: self.database.clone(),
                     block,
                     transaction: Hash::from(transaction),
                     author: VerifyingKey::from_bytes(&author)?,
-                    timestamp: UtcDateTime::from_unix_timestamp(timestamp).ok()?
+                    timestamp: UtcDateTime::from_unix_timestamp(timestamp).ok()?,
+                    event: None
                 })
             }
         }

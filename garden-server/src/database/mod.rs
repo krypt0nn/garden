@@ -28,6 +28,8 @@ use libflowerpot::storage::Storage;
 
 use garden_protocol::events::{Events, EventsError};
 
+pub mod community;
+
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError<S: Storage> {
     #[error("storage error: {0}")]
@@ -133,7 +135,7 @@ impl<S: Storage> Database<S> {
     }
 
     /// Sync index state with the blockchain storage.
-    pub fn sync(&mut self) -> Result<(), DatabaseError<S>> {
+    pub fn sync(&self) -> Result<(), DatabaseError<S>> {
         for block_hash in self.storage.history() {
             let block_hash = block_hash.map_err(DatabaseError::Storage)?;
 
@@ -213,5 +215,14 @@ impl<S: Storage> Database<S> {
         }
 
         Ok(())
+    }
+
+    /// Get iterator over all the stored communities.
+    pub fn communities(&self) -> community::CommunityIter<S> {
+        community::CommunityIter {
+            storage: self.storage.clone(),
+            index: self.index.clone(),
+            last_rowid: 0
+        }
     }
 }

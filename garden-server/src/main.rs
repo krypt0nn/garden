@@ -24,6 +24,12 @@ use clap::Parser;
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::SeedableRng;
 
+use axum::{
+    routing::{get, post},
+    http::StatusCode,
+    Json, Router
+};
+
 use libflowerpot::crypto::key_exchange::SecretKey;
 use libflowerpot::storage::Storage;
 use libflowerpot::storage::sqlite_storage::SqliteStorage;
@@ -39,21 +45,29 @@ struct Cli {
     #[arg(short = 's', long)]
     storage: PathBuf,
 
+    /// Connect to another flowerpot node.
     #[arg(short = 'n', long = "node", alias = "connect")]
     nodes: Vec<String>,
 
+    /// Listen address for incoming flowerpot node connections.
     #[arg(
-        short = 'l',
         long,
-        alias = "local",
-        alias = "bind",
-        alias = "listen",
+        short = 'f',
         default_value_t = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 13874)
     )]
-    local_addr: SocketAddr
+    flowerpot_addr: SocketAddr,
+
+    /// Listen address for garden protocol HTTP API server.
+    #[arg(
+        long,
+        short = 'a',
+        default_value_t = SocketAddr::new(Ipv6Addr::LOCALHOST.into(), 8080)
+    )]
+    api_addr: SocketAddr
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     if let Some(parent) = cli.storage.parent() {
@@ -71,8 +85,11 @@ fn main() -> anyhow::Result<()> {
         anyhow::bail!("no root block found");
     };
 
-    let listener = TcpListener::bind(cli.local_addr)
-        .context("failed to start local tcp listener")?;
+    let flowerpot_listener = TcpListener::bind(cli.flowerpot_addr)
+        .context("failed to start flowerpot tcp listener")?;
+
+    let api_listener = tokio::net::TcpListener::bind(cli.api_addr).await
+        .context("failed to start http api tcp listener")?;
 
     let mut node = Node::new(root_block);
 
@@ -93,13 +110,24 @@ fn main() -> anyhow::Result<()> {
         node.add_stream(stream);
     }
 
+    println!("start garden protocol server on {}", cli.api_addr);
+
+    tokio::spawn(async move {
+        let app = Router::new()
+            .route("/", get("hi"));
+
+        if let Err(err) = axum::serve(api_listener, app).await {
+            panic!("{err}");
+        }
+    });
+
     let handler = node.start(NodeOptions::default())
         .context("failed to start flowerpot blockchain node")?;
 
-    println!("start listener on {}", cli.local_addr);
+    println!("start flowerpot listener on {}", cli.flowerpot_addr);
 
     loop {
-        let (stream, addr) = listener.accept()
+        let (stream, addr) = flowerpot_listener.accept()
             .context("failed to accept incoming tcp connection")?;
 
         println!("tcp: accept connection from {addr}");

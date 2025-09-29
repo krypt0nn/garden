@@ -9,7 +9,10 @@ publish = false
 [dependencies]
 libflowerpot = { git = "https://github.com/krypt0nn/flowerpot" }
 garden-protocol = { path = "../garden-protocol" }
+clap = { version = "4.5", features = ["derive"] }
 thiserror = "2.0"
+anyhow = "1.0"
 rusqlite = { version = "0.37", features = ["bundled"] }
 spin = "0.10"
 time = "0.3"
+rand_chacha = "0.3"

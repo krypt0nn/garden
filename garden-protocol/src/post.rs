@@ -16,7 +16,22 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use regex::Regex;
+
 use super::Event;
+
+lazy_static::lazy_static! {
+    /// Post tag regex. The rules are:
+    ///
+    /// 1. Tag can contain only lowercase latin alphabet and numbers.
+    /// 2. Tag can contain dashes ("-") in-between the letters or digits.
+    /// 3. Tag must be at least 1 character (byte) long and cannot be longer
+    ///    than 255 characters (bytes).
+    ///
+    /// The name length must be verified separately from the regex.
+    pub static ref TAG_REGEX: Regex = Regex::new(r#"^[a-z0-9]{1,255}$|^[a-z0-9]{1,255}[a-z0-9\-]{0,255}[a-z0-9]{1,255}$"#)
+        .expect("failed to build tag regex");
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Content(String);
@@ -60,7 +75,9 @@ impl Tag {
     pub fn new(tag: impl ToString) -> Option<Self> {
         let tag = tag.to_string();
 
-        if tag.len() > u8::MAX as usize {
+        if !(1..=u8::MAX as usize).contains(&tag.len())
+            || !TAG_REGEX.is_match(&tag)
+        {
             return None;
         }
 

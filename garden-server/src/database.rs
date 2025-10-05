@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// garden-protocol
+// garden-server
 // Copyright (C) 2025  Nikita Podvirnyi <krypt0nn@vk.com>
 //
 // This program is free software: you can redistribute it and/or modify
@@ -20,17 +20,163 @@ use std::path::Path;
 use std::sync::Arc;
 
 use rusqlite::Connection;
-use spin::Mutex;
+use spin::{Mutex, MutexGuard};
+use time::UtcDateTime;
 
 use libflowerpot::crypto::hash::Hash;
-use libflowerpot::transaction::Transaction;
+use libflowerpot::crypto::sign::VerifyingKey;
 use libflowerpot::block::BlockContent;
 use libflowerpot::storage::Storage;
 
-use garden_protocol::events::{Events, EventsError};
+use garden_protocol::{Events, EventsError};
 
-pub mod community;
-pub mod community_post;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reaction {
+    pub name: String,
+    pub timestamp: UtcDateTime,
+    pub author: VerifyingKey
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Comment {
+    pub content: String,
+    pub timestamp: UtcDateTime,
+    pub author: VerifyingKey,
+    pub reactions: Box<[Reaction]>,
+    pub comments: Box<[Hash]>
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Post {
+    pub content: String,
+    pub tags: Box<[String]>,
+    pub timestamp: UtcDateTime,
+    pub author: VerifyingKey,
+    pub reactions: Box<[Reaction]>,
+    pub comments: Box<[Hash]>
+}
+
+fn query_reactions(
+    lock: &MutexGuard<'_, Connection>,
+    address: &Hash
+) -> anyhow::Result<Option<Box<[Reaction]>>> {
+    let mut query = lock.prepare_cached("
+        SELECT
+            name,
+            timestamp,
+            author
+        FROM v1_reactions
+        WHERE ref = ?1
+    ")?;
+
+    let result = query.query_map([address.as_bytes()], |row| {
+        Ok((
+            row.get::<_, String>("name")?,
+            row.get::<_, i64>("timestamp")?,
+            row.get::<_, [u8; VerifyingKey::SIZE]>("author")?
+        ))
+    });
+
+    let result = match result {
+        Ok(result) => result,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+        Err(err) => anyhow::bail!(err)
+    };
+
+    let mut reactions = Vec::new();
+
+    for reaction in result {
+        let (name, timestamp, author) = reaction?;
+
+        reactions.push(Reaction {
+            name,
+            timestamp: UtcDateTime::from_unix_timestamp(timestamp)?,
+            author: VerifyingKey::from_bytes(&author)
+                .ok_or_else(|| anyhow::anyhow!("invalid verifying key format"))?
+        });
+    }
+
+    Ok(Some(reactions.into_boxed_slice()))
+}
+
+fn query_comments_list(
+    lock: &MutexGuard<'_, Connection>,
+    address: &Hash
+) -> anyhow::Result<Option<Box<[Hash]>>> {
+    let mut query = lock.prepare_cached("
+        SELECT transaction FROM v1_comments WHERE ref = ?1
+    ")?;
+
+    let result = query.query_map([address.as_bytes()], |row| {
+        row.get::<_, [u8; Hash::SIZE]>("transaction")
+    });
+
+    let result = match result {
+        Ok(result) => result,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+        Err(err) => anyhow::bail!(err)
+    };
+
+    let mut comments = Vec::new();
+
+    for comment in result {
+        comments.push(Hash::from(comment?));
+    }
+
+    Ok(Some(comments.into_boxed_slice()))
+}
+
+fn query_post(
+    lock: &MutexGuard<'_, Connection>,
+    address: &Hash
+) -> anyhow::Result<Option<Post>> {
+    let mut query = lock.prepare_cached("
+        SELECT
+            content,
+            timestamp,
+            author
+        FROM v1_posts
+        WHERE transaction = ?1
+    ")?;
+
+    let result = query.query_row([address.as_bytes()], |row| {
+        Ok((
+            row.get::<_, String>("content")?,
+            row.get::<_, i64>("timestamp")?,
+            row.get::<_, [u8; VerifyingKey::SIZE]>("author")?
+        ))
+    });
+
+    let (content, timestamp, author) = match result {
+        Ok(result) => result,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+        Err(err) => anyhow::bail!(err)
+    };
+
+    let mut query = lock.prepare_cached("
+        SELECT tag FROM v1_post_tags WHERE post = ?1
+    ")?;
+
+    let mut tags = Vec::new();
+
+    let result = query.query_map([address.as_bytes()], |row| {
+        row.get::<_, String>("tag")
+    })?;
+
+    for tag in result {
+        tags.push(tag?);
+    }
+
+    Ok(Some(Post {
+        content,
+        tags: tags.into_boxed_slice(),
+        timestamp: UtcDateTime::from_unix_timestamp(timestamp)?,
+        author: VerifyingKey::from_bytes(&author)
+            .ok_or_else(|| anyhow::anyhow!("invalid verifying key format"))?,
+        reactions: query_reactions(lock, address)?.unwrap_or_default(),
+        comments: query_comments_list(lock, address)?.unwrap_or_default()
+    }))
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError<S: Storage> {
@@ -47,54 +193,10 @@ pub enum DatabaseError<S: Storage> {
     VerifySignature(String)
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum QueryDatabaseError<S: Storage> {
-    #[error("storage error: {0}")]
-    Storage(#[source] S::Error),
-
-    #[error("the following block is missing: {0}")]
-    MissingBlock(Hash),
-
-    #[error("asked blockchain block {block} missing transaction {transaction}")]
-    MissingTransaction {
-        block: Hash,
-        transaction: Hash
-    },
-
-    #[error("invalid event in the asked blockchain address: block {block}, transaction {transaction}")]
-    InvalidEvent {
-        block: Hash,
-        transaction: Hash
-    }
-}
-
-/// Garden protocol database.
-///
-/// The database consist of two key components:
-/// 1. flowerpot blockchain storage, and
-/// 2. sqlite-powered index.
-///
-/// Since garden works locally we don't need incredibly fast processing speeds,
-/// although we kinda do have them anyway. Thus, to reduce space overhead, we
-/// do not store any data in the sqlite database. Instead, we use sqlite
-/// database as index of the blockchain data: we store each event as some
-/// metadata values like timestamp and author's verifying key, and a link to
-/// the flowerpot blockchain transaction where this event is stored. Then we
-/// can use flowerpot storage to request this transaction and decode it in
-/// runtime.
-///
-/// This architecture allows us to use abstract blockchain storage and have
-/// minimal disk space overhead of just some metadata fields. The runtime
-/// overhead is also minimal and absolutely acceptable for local, one-user
-/// solution.
-///
-/// This architecture also natively supports soft history modifications
-/// handling. Since we reference blockchain storage and don't store any data -
-/// if blockchain changes at any point we won't have desync issues.
 #[derive(Debug, Clone)]
 pub struct Database<S: Storage> {
-    pub(crate) storage: S,
-    pub(crate) index: Arc<Mutex<Connection>>
+    storage: S,
+    index: Arc<Mutex<Connection>>
 }
 
 impl<S: Storage> Database<S> {
@@ -105,39 +207,44 @@ impl<S: Storage> Database<S> {
         let index = Connection::open(index_path)?;
 
         index.execute_batch(r#"
-            CREATE TABLE IF NOT EXISTS handled_blocks (
-                hash BLOB NOT NULL UNIQUE,
-
-                PRIMARY KEY (hash)
+            CREATE TABLE IF NOT EXISTS v1_handled_blocks (
+                hash BLOB NOT NULL UNIQUE
             );
 
-            CREATE TABLE IF NOT EXISTS create_community (
-                block       BLOB NOT NULL,
-                transaction BLOB NOT NULL,
-                author      BLOB NOT NULL,
+            CREATE TABLE IF NOT EXISTS v1_posts (
+                transaction BLOB    NOT NULL UNIQUE,
+                content     TEXT    NOT NULL,
                 timestamp   INTEGER NOT NULL,
+                author      BLOB    NOT NULL,
 
-                UNIQUE (block, transaction),
-
-                FOREIGN KEY (block) REFERENCES handled_blocks (hash)
-                ON DELETE CASCADE
+                PRIMARY KEY (transaction)
             );
 
-            CREATE TABLE IF NOT EXISTS create_community_post (
-                community_block       BLOB NOT NULL,
-                community_transaction BLOB NOT NULL,
-                post_block            BLOB NOT NULL,
-                post_transaction      BLOB NOT NULL,
-                post_author           BLOB NOT NULL,
-                post_timestamp        INTEGER NOT NULL,
+            CREATE TABLE IF NOT EXISTS v1_post_tags (
+                post BLOB NOT NULL,
+                tag  TEXT NOT NULL,
 
-                UNIQUE (post_block, post_transaction),
+                UNIQUE (post, tag)
+            );
 
-                FOREIGN KEY (community_block) REFERENCES handled_blocks (hash)
-                ON DELETE CASCADE,
+            CREATE TABLE IF NOT EXISTS v1_comments (
+                ref         BLOB    NOT NULL,
+                transaction BLOB    NOT NULL UNIQUE,
+                content     TEXT    NOT NULL,
+                timestamp   INTEGER NOT NULL,
+                author      BLOB    NOT NULL,
 
-                FOREIGN KEY (post_block) REFERENCES handled_blocks (hash)
-                ON DELETE CASCADE
+                PRIMARY KEY (transaction)
+            );
+
+            CREATE TABLE IF NOT EXISTS v1_reactions (
+                ref         BLOB    NOT NULL,
+                transaction BLOB    NOT NULL UNIQUE,
+                name        TEXT    NOT NULL,
+                timestamp   INTEGER NOT NULL,
+                author      BLOB    NOT NULL,
+
+                PRIMARY KEY (transaction)
             );
         "#)?;
 
@@ -147,47 +254,13 @@ impl<S: Storage> Database<S> {
         })
     }
 
-    /// Query transaction from the database storage.
-    pub fn query_transaction(
-        &self,
-        block: impl AsRef<Hash>,
-        transaction: impl AsRef<Hash>
-    ) -> Result<Transaction, QueryDatabaseError<S>> {
-        let block_hash = block.as_ref();
-        let transaction_hash = transaction.as_ref();
-
-        let block = self.storage.read_block(block_hash)
-            .map_err(QueryDatabaseError::Storage)?;
-
-        let Some(block) = block else {
-            return Err(QueryDatabaseError::MissingBlock(*block_hash));
-        };
-
-        let BlockContent::Transactions(transactions) = block.content() else {
-            return Err(QueryDatabaseError::MissingTransaction {
-                block: *block_hash,
-                transaction: *transaction_hash
-            });
-        };
-
-        transactions.iter()
-            .find(|transaction| &transaction.hash() == transaction_hash)
-            .cloned()
-            .ok_or_else(|| {
-                QueryDatabaseError::MissingTransaction {
-                    block: *block_hash,
-                    transaction: *transaction_hash
-                }
-            })
-    }
-
     /// Check if blockchain block is handled in the index.
     pub fn is_handled(
         &self,
-        block: impl AsRef<Hash>
+        block: &Hash
     ) -> rusqlite::Result<bool> {
         let result = self.index.lock()
-            .prepare_cached("SELECT 1 FROM handled_blocks WHERE hash = ?1")?
+            .prepare_cached("SELECT 1 FROM v1_handled_blocks WHERE hash = ?1")?
             .query_one([block.as_ref().as_bytes()], |_| Ok(true));
 
         match result {
@@ -202,7 +275,7 @@ impl<S: Storage> Database<S> {
         for block_hash in self.storage.history() {
             let block_hash = block_hash.map_err(DatabaseError::Storage)?;
 
-            if self.is_handled(block_hash)? {
+            if self.is_handled(&block_hash)? {
                 continue;
             }
 
@@ -217,7 +290,7 @@ impl<S: Storage> Database<S> {
 
             let commit = lock.transaction()?;
 
-            commit.prepare_cached("INSERT INTO handled_blocks (hash) VALUES (?1)")?
+            commit.prepare_cached("INSERT INTO v1_handled_blocks (hash) VALUES (?1)")?
                 .execute([block_hash.as_bytes()])?;
 
             if let BlockContent::Transactions(transactions) = block.content() {
@@ -233,39 +306,75 @@ impl<S: Storage> Database<S> {
                         })?;
 
                     match Events::from_bytes(transaction.data())? {
-                        Events::CreateCommunity(_) => {
+                        Events::Post(post) => {
                             let mut query = commit.prepare_cached("
-                                INSERT INTO create_community (
-                                    block,
+                                INSERT INTO v1_posts (
                                     transaction,
-                                    author,
-                                    timestamp
+                                    content,
+                                    timestamp,
+                                    author
                                 ) VALUES (?1, ?2, ?3, ?4)
                             ")?;
 
                             query.execute((
-                                block_hash.as_bytes(),
                                 transaction_hash.as_bytes(),
-                                transaction_author.to_bytes(),
-                                block_timestamp
+                                post.content().as_bytes(),
+                                block_timestamp,
+                                transaction_author.to_bytes()
+                            ))?;
+
+                            for tag in post.tags() {
+                                let mut query = commit.prepare_cached("
+                                    INSERT INTO v1_post_tags (
+                                        post,
+                                        tag
+                                    ) VALUES (?1, ?2)
+                                ")?;
+
+                                query.execute((
+                                    transaction_hash.as_bytes(),
+                                    tag.as_bytes()
+                                ))?;
+                            }
+                        }
+
+                        Events::Comment(comment) => {
+                            let mut query = commit.prepare_cached("
+                                INSERT INTO v1_comments (
+                                    ref,
+                                    transaction,
+                                    content,
+                                    timestamp,
+                                    author
+                                ) VALUES (?1, ?2, ?3, ?4, ?5)
+                            ")?;
+
+                            query.execute((
+                                comment.ref_address().as_bytes(),
+                                transaction_hash.as_bytes(),
+                                comment.content().as_bytes(),
+                                block_timestamp,
+                                transaction_author.to_bytes()
                             ))?;
                         }
 
-                        Events::CreateCommunityPost(_) => {
+                        Events::Reaction(reaction) => {
                             let mut query = commit.prepare_cached("
-                                INSERT INTO create_community_post (
-                                    block,
+                                INSERT INTO v1_reactions (
+                                    ref,
                                     transaction,
-                                    author,
-                                    timestamp
-                                ) VALUES (?1, ?2, ?3, ?4)
+                                    name,
+                                    timestamp,
+                                    author
+                                ) VALUES (?1, ?2, ?3, ?4, ?5)
                             ")?;
 
                             query.execute((
-                                block_hash.as_bytes(),
+                                reaction.ref_address().as_bytes(),
                                 transaction_hash.as_bytes(),
-                                transaction_author.to_bytes(),
-                                block_timestamp
+                                reaction.reaction().to_name(),
+                                block_timestamp,
+                                transaction_author.to_bytes()
                             ))?;
                         }
                     }
@@ -280,11 +389,86 @@ impl<S: Storage> Database<S> {
         Ok(())
     }
 
-    /// Get iterator over all the stored communities.
-    pub fn communities(&self) -> community::CommunityIter<S> {
-        community::CommunityIter {
-            database: self.clone(),
-            last_rowid: 0
+    // TODO: better error handling
+
+    /// Try to query list of reactions for a post or comment with provided
+    /// flowerpot blockchain transaction hash.
+    ///
+    /// Return `Ok(None)` if there's no such transaction.
+    pub fn query_reactions(
+        &self,
+        address: &Hash
+    ) -> anyhow::Result<Option<Box<[Reaction]>>> {
+        query_reactions(&self.index.lock(), address)
+    }
+
+    /// Try to query list of flowerpot transactions' hashes which are comments
+    /// for the provided post/comment transaction hash.
+    ///
+    /// Return `Ok(None)` if there's no such transaction.
+    pub fn query_comments_list(
+        &self,
+        address: &Hash
+    ) -> anyhow::Result<Option<Box<[Hash]>>> {
+        query_comments_list(&self.index.lock(), address)
+    }
+
+    /// Try to query post with provided flowerpot blockchain transaction hash.
+    ///
+    /// Return `Ok(None)` if there's no such transaction.
+    pub fn query_post(&self, address: &Hash) -> anyhow::Result<Option<Post>> {
+        query_post(&self.index.lock(), address)
+    }
+
+    /// Get iterator of all the indexed posts.
+    pub fn posts(&self) -> PostsIter {
+        PostsIter {
+            index: self.index.clone(),
+            curr_id: i64::MAX
+        }
+    }
+}
+
+// TODO: search filters
+
+/// Iterator over the posts stored in the blockchain index. The posts are
+/// returned in descending chronology order, so new posts are returned first.
+pub struct PostsIter {
+    index: Arc<Mutex<Connection>>,
+    curr_id: i64
+}
+
+impl Iterator for PostsIter {
+    type Item = anyhow::Result<Post>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let lock = self.index.lock();
+
+        let mut query = lock.prepare_cached("
+            SELECT
+                rowid,
+                transaction
+            FROM v1_posts
+            WHERE rowid < ?1
+            ORDER BY rowid DESC
+        ").ok()?;
+
+        let (
+            rowid,
+            transaction
+        ) = query.query_row([self.curr_id], |row| {
+            Ok((
+                row.get::<_, i64>("rowid")?,
+                row.get::<_, [u8; Hash::SIZE]>("transaction")?
+            ))
+        }).ok()?;
+
+        self.curr_id = rowid;
+
+        match query_post(&lock, &Hash::from(transaction)) {
+            Ok(Some(post)) => Some(Ok(post)),
+            Ok(None) => None,
+            Err(err) => Some(Err(err))
         }
     }
 }

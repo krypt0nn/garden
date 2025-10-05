@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// garden-protocol
+// garden-server
 // Copyright (C) 2025  Nikita Podvirnyi <krypt0nn@vk.com>
 //
 // This program is free software: you can redistribute it and/or modify
@@ -37,6 +37,7 @@ use libflowerpot::protocol::network::{PacketStream, PacketStreamOptions};
 use libflowerpot::node::{Node, NodeOptions};
 
 pub mod database;
+pub mod handlers;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]

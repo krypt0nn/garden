@@ -19,3 +19,5 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 spin = "0.10"
 time = "0.3"
 rand_chacha = "0.3"
+tracing = "0.1"
+tracing-subscriber = "0.3"

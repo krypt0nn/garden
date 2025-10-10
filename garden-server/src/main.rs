@@ -18,17 +18,15 @@
 
 use std::path::PathBuf;
 use std::net::{SocketAddr, Ipv6Addr, TcpListener, TcpStream};
+use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::SeedableRng;
 
-use axum::{
-    routing::{get, post},
-    http::StatusCode,
-    Json, Router
-};
+use axum::Router;
+use axum::routing::{get, post};
 
 use libflowerpot::crypto::key_exchange::SecretKey;
 use libflowerpot::storage::Storage;
@@ -42,9 +40,17 @@ pub mod handlers;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
+    /// Optional path to a file where to write debug information.
+    #[arg(long, alias = "debug")]
+    log: Option<PathBuf>,
+
     /// Path to the flowerpot blockchain storage.
     #[arg(short = 's', long)]
     storage: PathBuf,
+
+    /// Path to the garden-server index database.
+    #[arg(short = 'i', long)]
+    index: PathBuf,
 
     /// Connect to another flowerpot node.
     #[arg(short = 'n', long = "node", alias = "connect")]
@@ -71,6 +77,22 @@ struct Cli {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
+    if let Some(log) = cli.log {
+        if let Some(parent) = log.parent() {
+            std::fs::create_dir_all(parent)
+                .context("failed to create log file's parent folder")?;
+        }
+
+        let file = std::fs::File::create(log)
+            .context("failed to create log file")?;
+
+        tracing_subscriber::fmt()
+            .with_writer(file)
+            .with_ansi(false)
+            .with_max_level(tracing_subscriber::filter::LevelFilter::TRACE)
+            .init();
+    }
+
     if let Some(parent) = cli.storage.parent() {
         std::fs::create_dir_all(parent)
             .context("failed to create blockchain storage's parent folder")?;
@@ -85,6 +107,15 @@ async fn main() -> anyhow::Result<()> {
     let Some(root_block) = root_block else {
         anyhow::bail!("no root block found");
     };
+
+    println!("syncing garden-server index...");
+
+    let database = database::Database::new(storage.clone(), cli.index)
+        .context("failed to open flowerpot storage index")?;
+
+    database.sync().context("failed to sync flowerpot storage index")?;
+
+    println!("open flowerpot node listener...");
 
     let flowerpot_listener = TcpListener::bind(cli.flowerpot_addr)
         .context("failed to start flowerpot tcp listener")?;
@@ -111,19 +142,33 @@ async fn main() -> anyhow::Result<()> {
         node.add_stream(stream);
     }
 
-    println!("start garden protocol server on {}", cli.api_addr);
-
-    tokio::spawn(async move {
-        let app = Router::new()
-            .route("/", get("hi"));
-
-        if let Err(err) = axum::serve(api_listener, app).await {
-            panic!("{err}");
-        }
-    });
+    println!("start garden protocol server on http://{}", cli.api_addr);
 
     let handler = node.start(NodeOptions::default())
         .context("failed to start flowerpot blockchain node")?;
+
+    {
+        let handler = Arc::new(handler.clone());
+
+        tokio::spawn(async move {
+            let app = Router::new()
+                .route("/", get("hi"))
+                .route("/api/v1/post", post(handlers::api_send_post))
+                .route("/api/v1/post/{address}", get(handlers::api_get_post));
+
+            let serve = axum::serve(
+                api_listener,
+                app.with_state(handlers::App {
+                    database,
+                    handler
+                })
+            );
+
+            if let Err(err) = serve.await {
+                panic!("{err}");
+            }
+        });
+    }
 
     println!("start flowerpot listener on {}", cli.flowerpot_addr);
 

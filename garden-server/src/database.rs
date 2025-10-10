@@ -66,7 +66,7 @@ fn query_reactions(
             timestamp,
             author
         FROM v1_reactions
-        WHERE ref = ?1
+        WHERE ref_tx_hash = ?1
     ")?;
 
     let result = query.query_map([address.as_bytes()], |row| {
@@ -104,11 +104,11 @@ fn query_comments_list(
     address: &Hash
 ) -> anyhow::Result<Option<Box<[Hash]>>> {
     let mut query = lock.prepare_cached("
-        SELECT transaction FROM v1_comments WHERE ref = ?1
+        SELECT tx_hash FROM v1_comments WHERE ref_tx_hash = ?1
     ")?;
 
     let result = query.query_map([address.as_bytes()], |row| {
-        row.get::<_, [u8; Hash::SIZE]>("transaction")
+        row.get::<_, [u8; Hash::SIZE]>("tx_hash")
     });
 
     let result = match result {
@@ -154,7 +154,7 @@ fn query_post(
     };
 
     let mut query = lock.prepare_cached("
-        SELECT tag FROM v1_post_tags WHERE post = ?1
+        SELECT tag FROM v1_post_tags WHERE post_tx_hash = ?1
     ")?;
 
     let mut tags = Vec::new();
@@ -212,39 +212,39 @@ impl<S: Storage> Database<S> {
             );
 
             CREATE TABLE IF NOT EXISTS v1_posts (
-                transaction BLOB    NOT NULL UNIQUE,
+                tx_hash     BLOB    NOT NULL UNIQUE,
                 content     TEXT    NOT NULL,
                 timestamp   INTEGER NOT NULL,
                 author      BLOB    NOT NULL,
 
-                PRIMARY KEY (transaction)
+                PRIMARY KEY (tx_hash)
             );
 
             CREATE TABLE IF NOT EXISTS v1_post_tags (
-                post BLOB NOT NULL,
-                tag  TEXT NOT NULL,
+                post_tx_hash BLOB NOT NULL,
+                tag          TEXT NOT NULL,
 
-                UNIQUE (post, tag)
+                UNIQUE (post_tx_hash, tag)
             );
 
             CREATE TABLE IF NOT EXISTS v1_comments (
-                ref         BLOB    NOT NULL,
-                transaction BLOB    NOT NULL UNIQUE,
-                content     TEXT    NOT NULL,
-                timestamp   INTEGER NOT NULL,
-                author      BLOB    NOT NULL,
+                ref_tx_hash  BLOB    NOT NULL,
+                tx_hash      BLOB    NOT NULL UNIQUE,
+                content      TEXT    NOT NULL,
+                timestamp    INTEGER NOT NULL,
+                author       BLOB    NOT NULL,
 
-                PRIMARY KEY (transaction)
+                PRIMARY KEY (tx_hash)
             );
 
             CREATE TABLE IF NOT EXISTS v1_reactions (
-                ref         BLOB    NOT NULL,
-                transaction BLOB    NOT NULL UNIQUE,
+                ref_tx_hash BLOB    NOT NULL,
+                tx_hash     BLOB    NOT NULL UNIQUE,
                 name        TEXT    NOT NULL,
                 timestamp   INTEGER NOT NULL,
                 author      BLOB    NOT NULL,
 
-                PRIMARY KEY (transaction)
+                PRIMARY KEY (tx_hash)
             );
         "#)?;
 
@@ -271,13 +271,21 @@ impl<S: Storage> Database<S> {
     }
 
     /// Sync index state with the blockchain storage.
+    #[tracing::instrument(skip(self), fields(result), level = "info")]
     pub fn sync(&self) -> Result<(), DatabaseError<S>> {
         for block_hash in self.storage.history() {
             let block_hash = block_hash.map_err(DatabaseError::Storage)?;
 
             if self.is_handled(&block_hash)? {
+                tracing::trace!(
+                    block = block_hash.to_base64(),
+                    "skipping already processed block"
+                );
+
                 continue;
             }
+
+            tracing::debug!(block = block_hash.to_base64(), "processing block");
 
             let block = self.storage.read_block(&block_hash)
                 .map_err(DatabaseError::Storage)?;
@@ -307,9 +315,16 @@ impl<S: Storage> Database<S> {
 
                     match Events::from_bytes(transaction.data())? {
                         Events::Post(post) => {
+                            tracing::trace!(
+                                block = block_hash.to_base64(),
+                                transaction = transaction_hash.to_base64(),
+                                author = transaction_author.to_base64(),
+                                "processing PostEvent transaction"
+                            );
+
                             let mut query = commit.prepare_cached("
                                 INSERT INTO v1_posts (
-                                    transaction,
+                                    tx_hash,
                                     content,
                                     timestamp,
                                     author
@@ -326,7 +341,7 @@ impl<S: Storage> Database<S> {
                             for tag in post.tags() {
                                 let mut query = commit.prepare_cached("
                                     INSERT INTO v1_post_tags (
-                                        post,
+                                        post_tx_hash,
                                         tag
                                     ) VALUES (?1, ?2)
                                 ")?;
@@ -339,10 +354,17 @@ impl<S: Storage> Database<S> {
                         }
 
                         Events::Comment(comment) => {
+                            tracing::trace!(
+                                block = block_hash.to_base64(),
+                                transaction = transaction_hash.to_base64(),
+                                author = transaction_author.to_base64(),
+                                "processing CommentEvent transaction"
+                            );
+
                             let mut query = commit.prepare_cached("
                                 INSERT INTO v1_comments (
-                                    ref,
-                                    transaction,
+                                    ref_tx_hash,
+                                    tx_hash,
                                     content,
                                     timestamp,
                                     author
@@ -359,10 +381,17 @@ impl<S: Storage> Database<S> {
                         }
 
                         Events::Reaction(reaction) => {
+                            tracing::trace!(
+                                block = block_hash.to_base64(),
+                                transaction = transaction_hash.to_base64(),
+                                author = transaction_author.to_base64(),
+                                "processing ReactionEvent transaction"
+                            );
+
                             let mut query = commit.prepare_cached("
                                 INSERT INTO v1_reactions (
-                                    ref,
-                                    transaction,
+                                    ref_tx_hash,
+                                    tx_hash,
                                     name,
                                     timestamp,
                                     author

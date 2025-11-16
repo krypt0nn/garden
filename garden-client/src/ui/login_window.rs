@@ -20,19 +20,24 @@ use adw::prelude::*;
 use relm4::prelude::*;
 
 use crate::accounts::Account;
+use crate::ui::new_account_dialog::NewAccountDialog;
 
 #[derive(Debug, Clone)]
 pub enum LoginWindowMsg {
-    New
+    New,
+    AddAccount(Account)
 }
 
 pub struct LoginWindow {
-    accounts: Box<[Account]>
+    accounts: Vec<Account>,
+
+    window: adw::ApplicationWindow,
+    new_account_dialog: Controller<NewAccountDialog>
 }
 
 #[relm4::component(pub)]
 impl SimpleComponent for LoginWindow {
-    type Init = Box<[Account]>;
+    type Init = Vec<Account>;
     type Input = LoginWindowMsg;
     type Output = ();
 
@@ -125,10 +130,16 @@ impl SimpleComponent for LoginWindow {
     fn init(
         init: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>
+        sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
         let model = Self {
-            accounts: init
+            accounts: init,
+
+            window: root.clone(),
+
+            new_account_dialog: NewAccountDialog::builder()
+                .launch(())
+                .forward(sender.input_sender(), LoginWindowMsg::AddAccount)
         };
 
         let widgets = view_output!();
@@ -143,7 +154,15 @@ impl SimpleComponent for LoginWindow {
     ) {
         match message {
             LoginWindowMsg::New => {
-                println!("test");
+                self.new_account_dialog.widget().present(Some(&self.window));
+            }
+
+            LoginWindowMsg::AddAccount(account) => {
+                self.accounts.push(account);
+
+                // TODO: error handling dialog
+                crate::accounts::write(&self.accounts)
+                    .expect("failed to update accounts file");
             }
         }
     }

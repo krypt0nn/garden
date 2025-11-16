@@ -18,9 +18,9 @@
 
 use std::path::PathBuf;
 
-use anyhow::Context;
-
 use relm4::prelude::*;
+
+use anyhow::Context;
 
 pub mod accounts;
 pub mod ui;
@@ -88,7 +88,7 @@ fn main() -> anyhow::Result<()> {
     let app = RelmApp::new("com.github.krypt0nn.garden");
 
     // Show loading window.
-    app.run::<ui::login::LoginWindow>(accounts::read()?);
+    app.run::<ui::login_window::LoginWindow>(accounts::read()?.to_vec());
 
     Ok(())
 }

@@ -16,5 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pub mod login;
-pub mod main;
+pub mod login_window;
+pub mod new_account_dialog;
+
+pub mod main_window;

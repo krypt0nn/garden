@@ -8,5 +8,6 @@
         <file preprocess="xml-stripblanks" alias="contact-new-symbolic.svg">images/icons/contact-new-symbolic.svg</file>
         <file preprocess="xml-stripblanks" alias="person-symbolic.svg">images/icons/person-symbolic.svg</file>
         <file preprocess="xml-stripblanks" alias="user-trash-symbolic.svg">images/icons/user-trash-symbolic.svg</file>
+        <file preprocess="xml-stripblanks" alias="dice3-symbolic.svg">images/icons/dice3-symbolic.svg</file>
     </gresource>
 </gresources>

@@ -172,8 +172,8 @@ pub fn read() -> anyhow::Result<Box<[Account]>> {
 }
 
 /// Try to write accounts file.
-pub fn write(
-    accounts: impl IntoIterator<Item = Account>
+pub fn write<'a>(
+    accounts: impl IntoIterator<Item = &'a Account>
 ) -> anyhow::Result<()> {
     let accounts = accounts.into_iter()
         .map(|account| account.to_json())

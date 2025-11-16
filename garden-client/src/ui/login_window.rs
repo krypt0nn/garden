@@ -23,15 +23,85 @@ use crate::accounts::Account;
 use crate::ui::new_account_dialog::NewAccountDialog;
 
 #[derive(Debug, Clone)]
+pub enum LoginWindowAccountFactoryMsg {
+    Delete
+}
+
+#[derive(Debug)]
+struct LoginWindowAccountFactory {
+    account: Account,
+    index: DynamicIndex
+}
+
+#[relm4::factory]
+impl FactoryComponent for LoginWindowAccountFactory {
+    type Init = Account;
+    type Input = LoginWindowAccountFactoryMsg;
+    type Output = LoginWindowMsg;
+    type CommandOutput = ();
+    type ParentWidget = adw::PreferencesGroup;
+
+    view! {
+        #[root]
+        adw::ActionRow {
+            set_title: self.account.name(),
+            set_activatable: true,
+
+            add_prefix = &gtk::Image {
+                set_icon_name: Some("person-symbolic")
+            },
+
+            add_suffix = &gtk::Button {
+                set_vexpand: false,
+                set_valign: gtk::Align::Center,
+
+                add_css_class: "flat",
+                add_css_class: "destructive-action",
+
+                adw::ButtonContent {
+                    set_icon_name: "user-trash-symbolic"
+                },
+
+                connect_clicked => LoginWindowAccountFactoryMsg::Delete
+            }
+        }
+    }
+
+    #[inline]
+    fn init_model(
+        init: Self::Init,
+        index: &DynamicIndex,
+        _sender: FactorySender<Self>
+    ) -> Self {
+        Self {
+            account: init,
+            index: index.clone()
+        }
+    }
+
+    fn update(
+        &mut self,
+        msg: Self::Input,
+        sender: FactorySender<Self>
+    ) {
+        match msg {
+            LoginWindowAccountFactoryMsg::Delete => {
+                let _ = sender.output(LoginWindowMsg::DeleteAccount(self.index.current_index()));
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum LoginWindowMsg {
     New,
-    AddAccount(Account)
+    AddAccount(Account),
+    DeleteAccount(usize)
 }
 
 pub struct LoginWindow {
-    accounts: Vec<Account>,
-
     window: adw::ApplicationWindow,
+    accounts_factory: FactoryVecDeque<LoginWindowAccountFactory>,
     new_account_dialog: Controller<NewAccountDialog>
 }
 
@@ -43,7 +113,7 @@ impl SimpleComponent for LoginWindow {
 
     view! {
         #[root]
-        window = adw::ApplicationWindow {
+        adw::ApplicationWindow {
             set_title: Some("Garden"),
 
             set_size_request: (800, 600),
@@ -64,7 +134,7 @@ impl SimpleComponent for LoginWindow {
                     set_valign: gtk::Align::Center,
 
                     #[watch]
-                    set_visible: model.accounts.is_empty(),
+                    set_visible: model.accounts_factory.is_empty(),
 
                     gtk::Button {
                         set_hexpand: false,
@@ -84,9 +154,10 @@ impl SimpleComponent for LoginWindow {
 
                 adw::PreferencesPage {
                     #[watch]
-                    set_visible: !model.accounts.is_empty(),
+                    set_visible: !model.accounts_factory.is_empty(),
 
-                    adw::PreferencesGroup {
+                    #[local_ref]
+                    accounts_factory -> adw::PreferencesGroup {
                         set_title: "Accounts",
 
                         #[wrap(Some)]
@@ -99,27 +170,6 @@ impl SimpleComponent for LoginWindow {
                             },
 
                             connect_clicked => LoginWindowMsg::New
-                        },
-
-                        adw::ActionRow {
-                            set_title: "hello",
-                            set_activatable: true,
-
-                            add_prefix = &gtk::Image {
-                                set_icon_name: Some("person-symbolic")
-                            },
-
-                            add_suffix = &gtk::Button {
-                                set_vexpand: false,
-                                set_valign: gtk::Align::Center,
-
-                                add_css_class: "flat",
-                                add_css_class: "destructive-action",
-
-                                adw::ButtonContent {
-                                    set_icon_name: "user-trash-symbolic"
-                                }
-                            }
                         }
                     }
                 }
@@ -132,15 +182,23 @@ impl SimpleComponent for LoginWindow {
         root: Self::Root,
         sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
-        let model = Self {
-            accounts: init,
-
+        let mut model = Self {
             window: root.clone(),
+
+            accounts_factory: FactoryVecDeque::builder()
+                .launch_default()
+                .forward(sender.input_sender(), std::convert::identity),
 
             new_account_dialog: NewAccountDialog::builder()
                 .launch(())
                 .forward(sender.input_sender(), LoginWindowMsg::AddAccount)
         };
+
+        for account in init {
+            model.accounts_factory.guard().push_back(account);
+        }
+
+        let accounts_factory = model.accounts_factory.widget();
 
         let widgets = view_output!();
 
@@ -158,10 +216,28 @@ impl SimpleComponent for LoginWindow {
             }
 
             LoginWindowMsg::AddAccount(account) => {
-                self.accounts.push(account);
+                let mut guard = self.accounts_factory.guard();
+
+                guard.push_back(account);
+
+                let accounts = guard.iter()
+                    .map(|component| &component.account);
 
                 // TODO: error handling dialog
-                crate::accounts::write(&self.accounts)
+                crate::accounts::write(accounts)
+                    .expect("failed to update accounts file");
+            }
+
+            LoginWindowMsg::DeleteAccount(index) => {
+                let mut guard = self.accounts_factory.guard();
+
+                guard.remove(index);
+
+                let accounts = guard.iter()
+                    .map(|component| &component.account);
+
+                // TODO: error handling dialog
+                crate::accounts::write(accounts)
                     .expect("failed to update accounts file");
             }
         }

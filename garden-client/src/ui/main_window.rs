@@ -36,7 +36,7 @@ impl SimpleComponent for MainWindow {
 
     view! {
         #[root]
-        window = adw::ApplicationWindow {
+        adw::ApplicationWindow {
             set_title: Some("Garden"),
 
             set_size_request: (1000, 800),

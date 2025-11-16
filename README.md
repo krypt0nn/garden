@@ -1,9 +1,9 @@
-# 🏡 garden - a decentralized social platform built upon the [flowerpot](https://github.com/krypt0nn/flowerpot) blockchain
+# 🏡 garden - a decentralized social platform built upon the [flowerpot](https://github.com/krypt0nn/flowerpot) project
 
 - [garden-protocol](./garden-protocol) - rust type definitions for the garden
   protocol.
-- [garden-server](./garden-server) - canonical protocol implementation which
-  provides HTTP API for easier integration in user-friendly apps.
+- [garden-client](./garden-client) - canonical protocol implementation in form
+  of a GTK client application (linux only).
 
 ## Platform concept
 

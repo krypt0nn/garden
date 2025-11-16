@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use libflowerpot::crypto::hash::Hash;
+use flowerpot::crypto::hash::Hash;
 
 use super::post::Content;
 use super::Event;

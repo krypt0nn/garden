@@ -18,7 +18,7 @@
 
 use std::str::FromStr;
 
-use libflowerpot::crypto::hash::Hash;
+use flowerpot::crypto::hash::Hash;
 
 use super::Event;
 

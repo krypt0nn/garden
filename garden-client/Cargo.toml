@@ -1,0 +1,34 @@
+[package]
+name = "garden-client"
+version = "0.1.0"
+authors = ["Nikita Podvirnyi <krypt0nn@vk.com>"]
+license = "GPL-3.0-or-later"
+edition = "2024"
+publish = false
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "s"
+
+[build-dependencies]
+glib-build-tools = "0.20.0"
+
+[dependencies.relm4]
+version = "0.10.0"
+features = ["macros", "libadwaita"]
+
+[dependencies.gtk]
+package = "gtk4"
+version = "0.10.2"
+features = ["v4_16"]
+
+[dependencies.adw]
+package = "libadwaita"
+version = "0.8.0"
+features = ["v1_8"]
+
+[dependencies]
+flowerpot = { git = "https://github.com/krypt0nn/flowerpot" }
+garden-protocol = { path = "../garden-protocol" }
+anyhow = "1.0"

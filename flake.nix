@@ -30,10 +30,36 @@
 
                     doCheck = false;
 
+                    meta = with pkgs.lib; {
+                        description = config.package.description;
+                        homepage = config.package.homepage;
+                        license = licenses.gpl3Only;
+
+                        maintainers = [
+                            {
+                                name = "Nikita Podvirnyi";
+                                email = "krypt0nn@vk.com";
+                                matrix = "@krypt0nn:mozilla.org";
+                                github = "krypt0nn";
+                                githubId = 29639507;
+                            }
+                        ];
+                    };
+
                     nativeBuildInputs = with pkgs; [
                         rust-bin.stable.latest.minimal
                         gcc
+                        glib
                         pkg-config
+
+                        gtk4
+                        gobject-introspection
+                        wrapGAppsHook4
+                    ];
+
+                    buildInputs = with pkgs; [
+                        libadwaita
+                        gdk-pixbuf
                     ];
                 };
 
@@ -44,7 +70,21 @@
                         })
 
                         gcc
+                        glib
                         pkg-config
+
+                        gtk4
+                        gobject-introspection
+                        wrapGAppsHook4
+
+                        # adwaita-1-demo
+                        libadwaita.devdoc
+                        icon-library
+                    ];
+
+                    buildInputs = with pkgs; [
+                        libadwaita
+                        gdk-pixbuf
                     ];
                 };
             });

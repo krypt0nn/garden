@@ -49,7 +49,30 @@ impl SimpleComponent for LoginWindow {
 
                 adw::HeaderBar,
 
+                adw::StatusPage {
+                    set_title: "Create account",
+                    set_description: Some("You don't have any account yet, so you need to create one"),
+
+                    set_vexpand: true,
+                    set_valign: gtk::Align::Center,
+
+                    gtk::Button {
+                        set_hexpand: false,
+                        set_halign: gtk::Align::Center,
+
+                        add_css_class: "suggested-action",
+                        add_css_class: "pill",
+
+                        adw::ButtonContent {
+                            set_icon_name: "contact-new-symbolic",
+                            set_label: "New account"
+                        }
+                    }
+                },
+
                 adw::PreferencesPage {
+                    set_visible: false,
+
                     adw::PreferencesGroup {
                         set_title: "Accounts",
 

@@ -455,6 +455,7 @@ dependencies = [
  "garden-protocol",
  "glib-build-tools",
  "gtk4",
+ "lazy_static",
  "libadwaita",
  "relm4",
 ]

@@ -18,6 +18,12 @@
 
 use relm4::prelude::*;
 
+pub mod ui;
+
+lazy_static::lazy_static! {
+    pub static ref APP_DEBUG: bool = cfg!(debug_assertions);
+}
+
 fn main() -> anyhow::Result<()> {
     adw::init().expect("Failed to initializa libadwaita");
 
@@ -37,10 +43,10 @@ fn main() -> anyhow::Result<()> {
     gtk::glib::set_program_name(Some("Garden"));
 
     // Create the app.
-    // let app = RelmApp::new("com.github.krypt0nn.garden");
+    let app = RelmApp::new("com.github.krypt0nn.garden");
 
     // Show loading window.
-    // app.run::<MainWindow>(());
+    app.run::<ui::login::LoginWindow>(());
 
     Ok(())
 }

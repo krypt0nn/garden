@@ -4,3 +4,8 @@ members = [
     "garden-protocol",
     "garden-client"
 ]
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "s"

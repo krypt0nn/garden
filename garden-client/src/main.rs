@@ -84,11 +84,11 @@ fn main() -> anyhow::Result<()> {
     gtk::glib::set_application_name("Garden");
     gtk::glib::set_program_name(Some("Garden"));
 
-    // Create the app.
+    // Run the app.
     let app = RelmApp::new("com.github.krypt0nn.garden");
 
-    // Show loading window.
-    app.run::<ui::login_window::LoginWindow>(accounts::read()?.to_vec());
+    // app.run::<ui::login_window::LoginWindow>(accounts::read()?.to_vec());
+    app.run::<ui::main_window::MainWindow>(());
 
     Ok(())
 }

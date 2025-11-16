@@ -19,18 +19,20 @@
 use adw::prelude::*;
 use relm4::prelude::*;
 
+use crate::accounts::Account;
+
 #[derive(Debug, Clone)]
 pub enum LoginWindowMsg {
-
+    New
 }
 
 pub struct LoginWindow {
-
+    accounts: Box<[Account]>
 }
 
 #[relm4::component(pub)]
 impl SimpleComponent for LoginWindow {
-    type Init = ();
+    type Init = Box<[Account]>;
     type Input = LoginWindowMsg;
     type Output = ();
 
@@ -56,6 +58,9 @@ impl SimpleComponent for LoginWindow {
                     set_vexpand: true,
                     set_valign: gtk::Align::Center,
 
+                    #[watch]
+                    set_visible: model.accounts.is_empty(),
+
                     gtk::Button {
                         set_hexpand: false,
                         set_halign: gtk::Align::Center,
@@ -66,12 +71,15 @@ impl SimpleComponent for LoginWindow {
                         adw::ButtonContent {
                             set_icon_name: "contact-new-symbolic",
                             set_label: "New account"
-                        }
+                        },
+
+                        connect_clicked => LoginWindowMsg::New
                     }
                 },
 
                 adw::PreferencesPage {
-                    set_visible: false,
+                    #[watch]
+                    set_visible: !model.accounts.is_empty(),
 
                     adw::PreferencesGroup {
                         set_title: "Accounts",
@@ -83,7 +91,9 @@ impl SimpleComponent for LoginWindow {
                             adw::ButtonContent {
                                 set_icon_name: "contact-new-symbolic",
                                 set_label: "New"
-                            }
+                            },
+
+                            connect_clicked => LoginWindowMsg::New
                         },
 
                         adw::ActionRow {
@@ -113,12 +123,12 @@ impl SimpleComponent for LoginWindow {
     }
 
     fn init(
-        _init: Self::Init,
+        init: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
         let model = Self {
-
+            accounts: init
         };
 
         let widgets = view_output!();
@@ -132,7 +142,9 @@ impl SimpleComponent for LoginWindow {
         _sender: ComponentSender<Self>
     ) {
         match message {
-
+            LoginWindowMsg::New => {
+                println!("test");
+            }
         }
     }
 }

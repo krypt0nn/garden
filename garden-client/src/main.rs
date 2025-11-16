@@ -16,15 +16,57 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use std::path::PathBuf;
+
+use anyhow::Context;
+
 use relm4::prelude::*;
 
+pub mod accounts;
 pub mod ui;
 
 lazy_static::lazy_static! {
     pub static ref APP_DEBUG: bool = cfg!(debug_assertions);
+
+    pub static ref DATA_FOLDER_PATH: PathBuf = {
+        if let Ok(path) = std::env::var("GARDEN_DATA_FOLDER") {
+            return PathBuf::from(path);
+        }
+
+        let path = std::env::var("XDG_DATA_HOME")
+            .map(|data| format!("{data}/garden"))
+            .or_else(|_| {
+                std::env::var("HOME")
+                    .map(|home| {
+                        format!("{home}/.local/share/garden")
+                    })
+            })
+            .or_else(|_| {
+                std::env::var("USER")
+                    .or_else(|_| std::env::var("USERNAME"))
+                    .map(|username| {
+                        format!("/home/{username}/.local/share/garden")
+                    })
+            })
+            .map(PathBuf::from)
+            .or_else(|_| {
+                std::env::current_dir()
+                    .map(|current| current.join("data"))
+            })
+            .expect("Couldn't locate data directory");
+
+        path.canonicalize().unwrap_or(path)
+    };
+
+    pub static ref ACCOUNTS_FILE_PATH: PathBuf = DATA_FOLDER_PATH.join("accounts.json");
 }
 
 fn main() -> anyhow::Result<()> {
+    if !DATA_FOLDER_PATH.exists() {
+        std::fs::create_dir_all(DATA_FOLDER_PATH.as_path())
+            .context("failed to create garden data folder")?;
+    }
+
     adw::init().expect("Failed to initializa libadwaita");
 
     // Register and include resources.
@@ -46,7 +88,7 @@ fn main() -> anyhow::Result<()> {
     let app = RelmApp::new("com.github.krypt0nn.garden");
 
     // Show loading window.
-    app.run::<ui::login::LoginWindow>(());
+    app.run::<ui::login::LoginWindow>(accounts::read()?);
 
     Ok(())
 }

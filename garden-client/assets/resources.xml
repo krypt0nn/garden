@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <!-- <gresource prefix="/com/github/krypt0nn/garden/icons/scalable/apps">
+    <file alias="icon.png">images/icon.png</file>
+  </gresource>
+
+  <gresource prefix="/com/github/krypt0nn/garden/icons/scalable/actions">
+    <file preprocess="xml-stripblanks" alias="applications-games-symbolic.svg">images/icons/applications-games-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="person-symbolic.svg">images/icons/person-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="violence-symbolic.svg">images/icons/violence-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="software-update-urgent-symbolic.svg">images/icons/software-update-urgent-symbolic.svg</file>
+  </gresource> -->
+</gresources>

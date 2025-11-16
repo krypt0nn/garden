@@ -61,13 +61,13 @@ impl SimpleComponent for NewAccountDialog {
 
             set_size_request: (600, 410),
 
-            add_css_class?: crate::APP_DEBUG.then_some("devel"),
-
             #[wrap(Some)]
             set_child = &gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
 
-                adw::HeaderBar,
+                adw::HeaderBar {
+                    add_css_class: "flat"
+                },
 
                 adw::PreferencesPage {
                     adw::PreferencesGroup {

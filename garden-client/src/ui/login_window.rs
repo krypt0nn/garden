@@ -130,6 +130,8 @@ impl SimpleComponent for LoginWindow {
                     set_title: "Create account",
                     set_description: Some("You don't have any account yet, so you need to create one"),
 
+                    set_icon_name: Some("com.github.krypt0nn.garden"),
+
                     set_vexpand: true,
                     set_valign: gtk::Align::Center,
 

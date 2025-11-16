@@ -20,6 +20,8 @@ mod post;
 mod comment;
 mod reaction;
 
+pub mod index;
+
 pub use post::{Content, Tag, PostEvent, PostEventError};
 pub use comment::{CommentEvent, CommentEventError};
 pub use reaction::{Reaction, ReactionEvent, ReactionEventError};
@@ -42,7 +44,7 @@ pub trait Event {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum EventsError {
+pub enum EventDecodeError {
     #[error("provided event bytes slice is too short")]
     SliceTooShort,
 
@@ -111,11 +113,11 @@ impl Events {
         }
     }
 
-    pub fn from_bytes(event: impl AsRef<[u8]>) -> Result<Self, EventsError> {
+    pub fn from_bytes(event: impl AsRef<[u8]>) -> Result<Self, EventDecodeError> {
         let event = event.as_ref();
 
         if event.len() < 2 {
-            return Err(EventsError::SliceTooShort);
+            return Err(EventDecodeError::SliceTooShort);
         }
 
         let id = u16::from_le_bytes([event[0], event[1]]);
@@ -139,7 +141,7 @@ impl Events {
                 ))
             }
 
-            _ => Err(EventsError::UnknownEvent(id))
+            _ => Err(EventDecodeError::UnknownEvent(id))
         }
     }
 }

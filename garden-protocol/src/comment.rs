@@ -35,26 +35,26 @@ pub enum CommentEventError {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CommentEvent {
-    ref_address: Hash,
+    ref_message_hash: Hash,
     content: Content
 }
 
 impl CommentEvent {
-    /// Create new comment event. Reference address is a transaction hash of
-    /// another comment or a post.
+    /// Create new comment event. Reference address is a flowerpot message hash
+    /// of another comment or a post.
     pub fn new(
-        ref_address: impl Into<Hash>,
+        ref_message_hash: impl Into<Hash>,
         content: Content
     ) -> Self {
         Self {
-            ref_address: ref_address.into(),
+            ref_message_hash: ref_message_hash.into(),
             content
         }
     }
 
     #[inline(always)]
-    pub const fn ref_address(&self) -> &Hash {
-        &self.ref_address
+    pub const fn ref_message_hash(&self) -> &Hash {
+        &self.ref_message_hash
     }
 
     #[inline(always)]
@@ -69,7 +69,7 @@ impl Event for CommentEvent {
     fn to_bytes(&self) -> Box<[u8]> {
         let mut buf = Vec::with_capacity(Hash::SIZE + self.content.len());
 
-        buf.extend(self.ref_address.as_bytes());
+        buf.extend(self.ref_message_hash.as_bytes());
         buf.extend(self.content.as_bytes());
 
         buf.into_boxed_slice()
@@ -80,9 +80,9 @@ impl Event for CommentEvent {
             return Err(CommentEventError::SliceTooShort);
         }
 
-        let mut ref_address = [0; Hash::SIZE];
+        let mut ref_message_hash = [0; Hash::SIZE];
 
-        ref_address.copy_from_slice(&event[..Hash::SIZE]);
+        ref_message_hash.copy_from_slice(&event[..Hash::SIZE]);
 
         let content = String::from_utf8(event[Hash::SIZE..].to_vec())?;
 
@@ -91,7 +91,7 @@ impl Event for CommentEvent {
         };
 
         Ok(Self {
-            ref_address: Hash::from(ref_address),
+            ref_message_hash: Hash::from(ref_message_hash),
             content
         })
     }

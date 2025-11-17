@@ -16,8 +16,33 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pub mod login_window;
-pub mod new_account_dialog;
-pub mod login_account_dialog;
+use std::sync::Arc;
 
-pub mod main_window;
+use spin::RwLock;
+
+use flowerpot::node::NodeHandler;
+
+use garden_protocol::index::Index;
+
+/// A helper struct that holds reference to background flowerpot node handler,
+/// a database indexer, and allows to execute garden protocol related actions
+/// and query data.
+#[derive(Clone)]
+pub struct Handler {
+    node: NodeHandler,
+    index: Arc<RwLock<Index>>
+}
+
+impl Handler {
+    /// Create new garden handler from provided flowerpot node handler.
+    pub fn new(node: NodeHandler) -> Self {
+        Self {
+            node,
+            index: Arc::new(RwLock::new(Index::default()))
+        }
+    }
+
+    pub fn posts(&self) {
+
+    }
+}

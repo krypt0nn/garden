@@ -20,10 +20,13 @@ use std::path::PathBuf;
 
 use relm4::prelude::*;
 
+use flowerpot::node::{Node, NodeOptions};
+
 use anyhow::Context;
 
 pub mod config;
 pub mod accounts;
+pub mod handler;
 pub mod ui;
 
 lazy_static::lazy_static! {
@@ -59,17 +62,38 @@ lazy_static::lazy_static! {
         path.canonicalize().unwrap_or(path)
     };
 
-    pub static ref CONFIG_FILE_PATH: PathBuf = DATA_FOLDER_PATH.join("config.toml");
+    pub static ref CONFIG_FILE_PATH: PathBuf = DATA_FOLDER_PATH.join("config.json");
 
     pub static ref ACCOUNTS_FILE_PATH: PathBuf = DATA_FOLDER_PATH.join("accounts.json");
 }
 
 fn main() -> anyhow::Result<()> {
+    // Create data folder.
     if !DATA_FOLDER_PATH.exists() {
         std::fs::create_dir_all(DATA_FOLDER_PATH.as_path())
             .context("failed to create garden data folder")?;
     }
 
+    // Read config file and update it immediately (in case it was changed).
+    let config = config::read()
+        .context("failed to read config file")?;
+
+    config::write(&config)
+        .context("failed to update config file")?;
+
+    // Create flowerpot node handler from config options.
+    // let options = NodeOptions {
+    //     messages_filter: Some(garden_protocol::messages_filter),
+
+    //     ..NodeOptions::default()
+    // };
+
+    // let mut node = Node::default();
+
+    // Create garden protocol handler.
+    // ...
+
+    // Initialize libadwaita.
     adw::init().expect("Failed to initializa libadwaita");
 
     // Register and include resources.
@@ -90,8 +114,8 @@ fn main() -> anyhow::Result<()> {
     // Run the app.
     let app = RelmApp::new("com.github.krypt0nn.garden");
 
-    // app.run::<ui::login_window::LoginWindow>(accounts::read()?.to_vec());
-    app.run::<ui::main_window::MainWindow>(());
+    app.run::<ui::login_window::LoginWindow>(accounts::read()?.to_vec());
+    // app.run::<ui::main_window::MainWindow>(());
 
     Ok(())
 }

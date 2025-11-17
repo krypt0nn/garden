@@ -19,12 +19,17 @@
 use adw::prelude::*;
 use relm4::prelude::*;
 
+use flowerpot::crypto::sign::SigningKey;
+
 use crate::accounts::Account;
-use crate::ui::new_account_dialog::NewAccountDialog;
+
+use crate::ui::new_account_dialog::{NewAccountDialog, NewAccountDialogMsg};
+use crate::ui::login_account_dialog::{LoginAccountDialog, LoginAccountDialogMsg};
 
 #[derive(Debug, Clone)]
 pub enum LoginWindowAccountFactoryMsg {
-    Delete
+    Delete,
+    Login
 }
 
 #[derive(Debug)]
@@ -63,7 +68,9 @@ impl FactoryComponent for LoginWindowAccountFactory {
                 },
 
                 connect_clicked => LoginWindowAccountFactoryMsg::Delete
-            }
+            },
+
+            connect_activated => LoginWindowAccountFactoryMsg::Login
         }
     }
 
@@ -88,6 +95,10 @@ impl FactoryComponent for LoginWindowAccountFactory {
             LoginWindowAccountFactoryMsg::Delete => {
                 let _ = sender.output(LoginWindowMsg::DeleteAccount(self.index.current_index()));
             }
+
+            LoginWindowAccountFactoryMsg::Login => {
+                let _ = sender.output(LoginWindowMsg::LoginIntoAccount(self.index.current_index()));
+            }
         }
     }
 }
@@ -96,13 +107,16 @@ impl FactoryComponent for LoginWindowAccountFactory {
 pub enum LoginWindowMsg {
     New,
     AddAccount(Account),
-    DeleteAccount(usize)
+    DeleteAccount(usize),
+    LoginIntoAccount(usize),
+    Login(SigningKey)
 }
 
 pub struct LoginWindow {
     window: adw::ApplicationWindow,
     accounts_factory: FactoryVecDeque<LoginWindowAccountFactory>,
-    new_account_dialog: Controller<NewAccountDialog>
+    new_account_dialog: Controller<NewAccountDialog>,
+    login_account_dialog: Controller<LoginAccountDialog>
 }
 
 #[relm4::component(pub)]
@@ -193,7 +207,11 @@ impl SimpleComponent for LoginWindow {
 
             new_account_dialog: NewAccountDialog::builder()
                 .launch(())
-                .forward(sender.input_sender(), LoginWindowMsg::AddAccount)
+                .forward(sender.input_sender(), LoginWindowMsg::AddAccount),
+
+            login_account_dialog: LoginAccountDialog::builder()
+                .launch(())
+                .forward(sender.input_sender(), LoginWindowMsg::Login)
         };
 
         for account in init {
@@ -210,11 +228,14 @@ impl SimpleComponent for LoginWindow {
     fn update(
         &mut self,
         message: Self::Input,
-        _sender: ComponentSender<Self>
+        sender: ComponentSender<Self>
     ) {
         match message {
             LoginWindowMsg::New => {
-                self.new_account_dialog.widget().present(Some(&self.window));
+                self.new_account_dialog.emit(NewAccountDialogMsg::Reset);
+
+                self.new_account_dialog.widget()
+                    .present(Some(&self.window));
             }
 
             LoginWindowMsg::AddAccount(account) => {
@@ -241,6 +262,36 @@ impl SimpleComponent for LoginWindow {
                 // TODO: error handling dialog
                 crate::accounts::write(accounts)
                     .expect("failed to update accounts file");
+            }
+
+            LoginWindowMsg::LoginIntoAccount(index) => {
+                let account = self.accounts_factory.guard()
+                    .get(index)
+                    .map(|component| component.account.clone());
+
+                if let Some(account) = account {
+                    // Try to login into account using empty password.
+                    match account.signing_key(b"") {
+                        // On success - just login into it.
+                        Ok(signing_key) => {
+                            sender.input(LoginWindowMsg::Login(signing_key));
+                        }
+
+                        // Otherwise open password entry dialog.
+                        Err(_) => {
+                            self.login_account_dialog.emit(
+                                LoginAccountDialogMsg::SetAccount(account)
+                            );
+
+                            self.login_account_dialog.widget()
+                                .present(Some(&self.window));
+                        }
+                    }
+                }
+            }
+
+            LoginWindowMsg::Login(signing_key) => {
+                println!("{}", signing_key.to_base64());
             }
         }
     }

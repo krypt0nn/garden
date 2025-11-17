@@ -30,6 +30,7 @@ use crate::accounts::Account;
 
 #[derive(Debug, Clone)]
 pub enum NewAccountDialogMsg {
+    Reset,
     RandSigningKey,
     VerifySigningKey,
     VerifyPassword,
@@ -70,6 +71,9 @@ impl SimpleComponent for NewAccountDialog {
                 },
 
                 adw::PreferencesPage {
+                    set_vexpand: true,
+                    set_valign: gtk::Align::Center,
+
                     adw::PreferencesGroup {
                         set_title: "New account",
 
@@ -216,6 +220,19 @@ impl SimpleComponent for NewAccountDialog {
         sender: ComponentSender<Self>
     ) {
         match message {
+            NewAccountDialogMsg::Reset => {
+                let signing_key = SigningKey::random(&mut self.rng);
+
+                self.signing_key_row.set_text(signing_key.to_base64().as_str());
+
+                self.name_row.set_text("New account");
+                self.password_row.set_text("");
+                self.repeat_password_row.set_text("");
+
+                self.is_signing_key_valid = true;
+                self.is_password_valid = true;
+            }
+
             NewAccountDialogMsg::RandSigningKey => {
                 let signing_key = SigningKey::random(&mut self.rng);
 

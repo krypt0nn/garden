@@ -39,7 +39,12 @@ impl SimpleComponent for MainWindow {
     view! {
         #[root]
         adw::ApplicationWindow {
-            set_title: Some("Garden"),
+            #[watch]
+            set_title: Some(&{
+                let verifying_key = model.signing_key.verifying_key();
+
+                format!("@{}", verifying_key.to_base64())
+            }),
 
             set_size_request: (1000, 700),
             set_hide_on_close: false,
@@ -49,7 +54,31 @@ impl SimpleComponent for MainWindow {
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
 
-                adw::HeaderBar,
+                adw::HeaderBar {
+                    pack_end = &gtk::Button {
+                        adw::ButtonContent {
+                            set_label: "Create post",
+                            set_icon_name: "chat-message-new-symbolic"
+                        }
+                    }
+                },
+
+                // adw::Clamp {
+                //     set_margin_top: 16,
+
+                //     gtk::Box {
+                //         set_orientation: gtk::Orientation::Horizontal,
+
+                //         gtk::Button {
+                //             add_css_class: "pill",
+
+                //             adw::ButtonContent {
+                //                 set_label: "Create post",
+                //                 set_icon_name: "chat-message-new-symbolic"
+                //             }
+                //         }
+                //     }
+                // },
 
                 gtk::ScrolledWindow {
                     set_vexpand: true,

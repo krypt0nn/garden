@@ -115,7 +115,6 @@ fn main() -> anyhow::Result<()> {
     let app = RelmApp::new("com.github.krypt0nn.garden");
 
     app.run::<ui::login_window::LoginWindow>(accounts::read()?.to_vec());
-    // app.run::<ui::main_window::MainWindow>(());
 
     Ok(())
 }

@@ -10,5 +10,6 @@
         <file preprocess="xml-stripblanks" alias="user-trash-symbolic.svg">images/icons/user-trash-symbolic.svg</file>
         <file preprocess="xml-stripblanks" alias="dice3-symbolic.svg">images/icons/dice3-symbolic.svg</file>
         <file preprocess="xml-stripblanks" alias="padlock2-open-symbolic.svg">images/icons/padlock2-open-symbolic.svg</file>
+        <file preprocess="xml-stripblanks" alias="chat-message-new-symbolic.svg">images/icons/chat-message-new-symbolic.svg</file>
     </gresource>
 </gresources>

@@ -16,7 +16,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::net::{TcpStream, TcpListener, ToSocketAddrs};
+use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::path::PathBuf;
 
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::{SeedableRng, RngCore};
@@ -33,6 +34,24 @@ use flowerpot::node::tracker::Tracker;
 
 use crate::config::Config;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Progress {
+    /// Open sqlite blockchain storage and create flowerpot blockchain tracker.
+    CreateTracker(PathBuf),
+
+    /// Establish connection with another flowepot node.
+    EstablishConnection(SocketAddr),
+
+    /// Synchronize flowerpot blockchain.
+    SynchronizeBlockchain,
+
+    /// Start flowerpot node.
+    StartNode,
+
+    /// Start background connections listener.
+    StartListener(SocketAddr)
+}
+
 /// Try to start flowerpot node.
 ///
 /// This method will establish packet streams with bootstrap nodes listed in the
@@ -40,13 +59,18 @@ use crate::config::Config;
 /// incoming stream connections and return started node handler.
 ///
 /// It's recommended to use this function in a separate thread.
-pub fn start(config: &Config) -> anyhow::Result<NodeHandler> {
+pub fn start(
+    config: &Config,
+    mut progress: impl FnMut(Progress)
+) -> anyhow::Result<NodeHandler> {
     // Create the node.
     let mut node = Node::default();
 
     // Attach blockchain storage.
     let storage_path = crate::STORAGES_FOLDER_PATH
         .join(format!("{}.db", config.blockchain_root_block.to_base64()));
+
+    progress(Progress::CreateTracker(storage_path.clone()));
 
     let storage = SqliteStorage::open(storage_path)
         .context("failed to open flowerpot blockchain storage")?;
@@ -86,6 +110,8 @@ pub fn start(config: &Config) -> anyhow::Result<NodeHandler> {
         for address in addresses {
             // TODO: errors logging.
 
+            progress(Progress::EstablishConnection(address));
+
             let Ok(stream) = TcpStream::connect(address) else {
                 continue;
             };
@@ -99,12 +125,16 @@ pub fn start(config: &Config) -> anyhow::Result<NodeHandler> {
     }
 
     // Sync the node.
+    progress(Progress::SynchronizeBlockchain);
+
     node.sync().map_err(|err| {
         anyhow::anyhow!(err.to_string())
             .context("failed to synchronize flowerpot blockchain")
     })?;
 
     // Start the node.
+    progress(Progress::StartNode);
+
     let handler = node.start(NodeOptions {
         messages_filter: Some(garden_protocol::messages_filter),
 
@@ -117,6 +147,8 @@ pub fn start(config: &Config) -> anyhow::Result<NodeHandler> {
     })?;
 
     // Start background thread to listen to incoming connections.
+    progress(Progress::StartListener(config.node_address));
+
     if let Ok(listener) = TcpListener::bind(config.node_address) {
         let handler = handler.clone();
 

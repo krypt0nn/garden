@@ -29,7 +29,7 @@ use super::comment::CommentIndex;
 
 /// Information about a garden post.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Post {
+pub struct PostInfo {
     /// Hash of the block of the flowerpot blockchain where the post info is
     /// stored.
     pub block_hash: Hash,
@@ -64,7 +64,10 @@ pub struct PostIndex {
 
 impl PostIndex {
     /// Try to read indexed post from provided flowerpot blockchain storage.
-    pub fn read(&self, storage: &dyn Storage) -> Result<Post, IndexReadError> {
+    pub fn read(
+        &self,
+        storage: &dyn Storage
+    ) -> Result<PostInfo, IndexReadError> {
         // FIXME: we don't need to read the whole block, only some of its
         //        metadata, but there's currently no logic for it.
         let Some(block) = storage.read_block(&self.block_hash)? else {
@@ -81,7 +84,7 @@ impl PostIndex {
 
         let (_, author) = message.verify()?;
 
-        Ok(Post {
+        Ok(PostInfo {
             block_hash: self.block_hash,
             message_hash: self.message_hash,
             author,

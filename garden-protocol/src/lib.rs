@@ -16,6 +16,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+use flowerpot::crypto::hash::Hash;
+use flowerpot::crypto::sign::VerifyingKey;
+use flowerpot::message::Message;
+
 mod post;
 mod comment;
 mod reaction;
@@ -165,4 +169,16 @@ impl From<ReactionEvent> for Events {
     fn from(value: ReactionEvent) -> Self {
         Self::Reaction(value)
     }
+}
+
+/// Filter function for garden protocol related flowerpot messages. This
+/// function will try to decode the message into a garden protocol event and
+/// return `true` on success.
+#[inline]
+pub fn messages_filter(
+    _root_block: &Hash,
+    message: &Message,
+    _author: &VerifyingKey
+) -> bool {
+    Events::from_bytes(message.data()).is_ok()
 }

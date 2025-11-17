@@ -145,4 +145,63 @@ impl Index {
 
         Ok(())
     }
+
+    /// Get iterator over all the indexed posts.
+    #[inline(always)]
+    pub const fn posts(&self) -> IndexedPostsIter<'_> {
+        IndexedPostsIter(self, 0)
+    }
+
+    /// Get iterator over all the indexed comments.
+    ///
+    /// Note that this iter goes over *all* the comments. You will need to
+    /// filter it manually.
+    #[inline(always)]
+    pub const fn comments(&self) -> IndexedCommentsIter<'_> {
+        IndexedCommentsIter(self, 0)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IndexedPostsIter<'index>(&'index Index, usize);
+
+impl<'index> Iterator for IndexedPostsIter<'index> {
+    type Item = &'index PostIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let post = self.0.posts.get(self.1)?;
+
+        self.1 += 1;
+
+        Some(post)
+    }
+}
+
+impl ExactSizeIterator for IndexedPostsIter<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.0.posts.len() - self.1
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IndexedCommentsIter<'index>(&'index Index, usize);
+
+impl<'index> Iterator for IndexedCommentsIter<'index> {
+    type Item = &'index CommentIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let comment = self.0.comments.get(self.1)?;
+
+        self.1 += 1;
+
+        Some(comment)
+    }
+}
+
+impl ExactSizeIterator for IndexedCommentsIter<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.0.comments.len() - self.1
+    }
 }

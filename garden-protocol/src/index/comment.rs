@@ -24,7 +24,7 @@ use time::UtcDateTime;
 
 use crate::{Events, Content};
 
-use super::IndexReadError;
+use super::{Index, IndexReadError};
 
 /// Information about a garden post comment.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,6 +102,16 @@ impl CommentIndex {
             author,
             timestamp: *block.timestamp(),
             content: comment.content().clone()
+        })
+    }
+
+    /// Get iterator over all the comments referencing the current comment.
+    pub fn comments<'index>(
+        &self,
+        index: &'index Index
+    ) -> impl Iterator<Item = &'index CommentIndex> {
+        index.comments().filter(|comment| {
+            comment.ref_message_hash == self.message_hash
         })
     }
 }

@@ -22,6 +22,7 @@ use relm4::prelude::*;
 
 use anyhow::Context;
 
+pub mod config;
 pub mod accounts;
 pub mod ui;
 
@@ -57,6 +58,8 @@ lazy_static::lazy_static! {
 
         path.canonicalize().unwrap_or(path)
     };
+
+    pub static ref CONFIG_FILE_PATH: PathBuf = DATA_FOLDER_PATH.join("config.toml");
 
     pub static ref ACCOUNTS_FILE_PATH: PathBuf = DATA_FOLDER_PATH.join("accounts.json");
 }

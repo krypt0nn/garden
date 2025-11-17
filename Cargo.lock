@@ -487,6 +487,7 @@ dependencies = [
  "rand_chacha",
  "relm4",
  "serde_json",
+ "spin 0.10.0",
  "time",
 ]
 

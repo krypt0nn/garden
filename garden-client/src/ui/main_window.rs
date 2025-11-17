@@ -53,6 +53,9 @@ impl SimpleComponent for MainWindow {
                     set_vexpand: true,
                     set_hexpand: true,
 
+                    set_margin_top: 16,
+                    set_margin_bottom: 16,
+
                     adw::Clamp {
                         gtk::ListBox {
                             set_selection_mode: gtk::SelectionMode::None,
@@ -85,6 +88,7 @@ impl SimpleComponent for MainWindow {
 
                                     gtk::Label {
                                         set_hexpand: true,
+                                        set_halign: gtk::Align::Start,
                                         set_justify: gtk::Justification::Fill,
 
                                         set_wrap: true,
@@ -120,6 +124,7 @@ impl SimpleComponent for MainWindow {
 
                                     gtk::Label {
                                         set_hexpand: true,
+                                        set_halign: gtk::Align::Start,
                                         set_justify: gtk::Justification::Fill,
 
                                         set_wrap: true,
@@ -155,6 +160,7 @@ impl SimpleComponent for MainWindow {
 
                                     gtk::Label {
                                         set_hexpand: true,
+                                        set_halign: gtk::Align::Start,
                                         set_justify: gtk::Justification::Fill,
 
                                         set_wrap: true,
@@ -190,6 +196,7 @@ impl SimpleComponent for MainWindow {
 
                                     gtk::Label {
                                         set_hexpand: true,
+                                        set_halign: gtk::Align::Start,
                                         set_justify: gtk::Justification::Fill,
 
                                         set_wrap: true,

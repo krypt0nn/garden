@@ -65,6 +65,8 @@ impl SimpleComponent for LoginAccountDialog {
                     set_valign: gtk::Align::Center,
 
                     adw::PreferencesGroup {
+                        set_title: "Login into account",
+
                         #[local_ref]
                         name_row -> adw::ActionRow {
                             #[watch]
@@ -116,7 +118,7 @@ impl SimpleComponent for LoginAccountDialog {
                             set_sensitive: model.is_password_valid,
 
                             adw::ButtonContent {
-                                set_icon_name: "contact-new-symbolic",
+                                set_icon_name: "padlock2-open-symbolic",
                                 set_label: "Login"
                             },
 

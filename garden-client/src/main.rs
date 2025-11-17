@@ -25,7 +25,6 @@ use anyhow::Context;
 pub mod config;
 pub mod node;
 pub mod accounts;
-pub mod handler;
 pub mod ui;
 
 lazy_static::lazy_static! {

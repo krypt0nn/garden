@@ -498,6 +498,7 @@ dependencies = [
  "flowerpot",
  "lazy_static",
  "regex",
+ "spin 0.10.0",
  "thiserror",
  "time",
 ]

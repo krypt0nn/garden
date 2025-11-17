@@ -25,6 +25,7 @@ mod comment;
 mod reaction;
 
 pub mod index;
+pub mod handler;
 
 pub use post::{Content, Tag, PostEvent, PostEventError};
 pub use comment::{CommentEvent, CommentEventError};

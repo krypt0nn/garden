@@ -21,20 +21,31 @@ use std::net::{SocketAddr, Ipv6Addr};
 use anyhow::Context;
 use serde_json::{json, Value as Json};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+use flowerpot::crypto::hash::Hash;
+use flowerpot::crypto::sign::VerifyingKey;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     /// Address of the local flowerpot node.
     pub node_address: SocketAddr,
 
     /// List of bootstrap flowerpot nodes addresses.
-    pub node_bootstrap: Vec<String>
+    pub node_bootstrap: Vec<String>,
+
+    /// Root block hash of a blockchain where the garden protocol is stored.
+    pub blockchain_root_block: Hash,
+
+    /// Verifying key of a blockchain where the garden protocol is stored.
+    pub blockchain_verifying_key: VerifyingKey
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             node_address: SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 13400),
-            node_bootstrap: Vec::new()
+            node_bootstrap: Vec::new(),
+            blockchain_root_block: Hash::from_base64("ErKCHaWAqeQDcty2qEo07tr8xQJrYGJ9LpRXAIDV41U=").unwrap(),
+            blockchain_verifying_key: VerifyingKey::from_base64("AiFiwoYx3vzTu-VhU7AdrTIfKgF3hC8pd6cBjC0AfFd2").unwrap()
         }
     }
 }
@@ -45,6 +56,10 @@ impl Config {
             "node": {
                 "address": self.node_address.to_string(),
                 "bootstrap": self.node_bootstrap
+            },
+            "blockchain": {
+                "root_block": self.blockchain_root_block.to_base64(),
+                "verifying_key": self.blockchain_verifying_key.to_base64()
             }
         })
     }
@@ -74,7 +89,25 @@ impl Config {
                     })
                     .unwrap_or(default.node_bootstrap.clone())
             })
-            .unwrap_or(default.node_bootstrap)
+            .unwrap_or(default.node_bootstrap),
+
+            blockchain_root_block: value.get("blockchain")
+                .map(|blockchain| {
+                    blockchain.get("root_block")
+                        .and_then(Json::as_str)
+                        .and_then(Hash::from_base64)
+                        .unwrap_or(default.blockchain_root_block)
+                })
+                .unwrap_or(default.blockchain_root_block),
+
+            blockchain_verifying_key: value.get("blockchain")
+                .map(|blockchain| {
+                    blockchain.get("verifying_key")
+                        .and_then(Json::as_str)
+                        .and_then(VerifyingKey::from_base64)
+                        .unwrap_or(default.blockchain_verifying_key.clone())
+                })
+                .unwrap_or(default.blockchain_verifying_key)
         }
     }
 }

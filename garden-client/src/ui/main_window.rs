@@ -358,6 +358,20 @@ impl SimpleComponent for MainWindow {
 
                 let handler = Handler::new(root_block, handler);
 
+                {
+                    let handler = handler.clone();
+
+                    std::thread::spawn(move || {
+                        loop {
+                            if let Err(err) = handler.update() {
+                                panic!("failed to update indexer: {err}");
+                            }
+
+                            std::thread::sleep(std::time::Duration::from_secs(5));
+                        }
+                    });
+                }
+
                 self.handler = HandlerStatus::Handler(handler);
             }
 

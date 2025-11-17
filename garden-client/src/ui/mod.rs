@@ -21,3 +21,4 @@ pub mod new_account_dialog;
 pub mod login_account_dialog;
 
 pub mod main_window;
+pub mod create_post_dialog;

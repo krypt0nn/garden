@@ -21,18 +21,24 @@ use relm4::prelude::*;
 
 use flowerpot::crypto::sign::SigningKey;
 
+use crate::ui::create_post_dialog::CreatePostDialog;
+
 #[derive(Debug, Clone)]
 pub enum MainWindowMsg {
-
+    SetSigningKey(SigningKey),
+    OpenCreatePostDialog
 }
 
 pub struct MainWindow {
-    signing_key: SigningKey
+    signing_key: Option<SigningKey>,
+
+    window: adw::ApplicationWindow,
+    create_post_dialog: Controller<CreatePostDialog>
 }
 
 #[relm4::component(pub)]
 impl SimpleComponent for MainWindow {
-    type Init = SigningKey;
+    type Init = ();
     type Input = MainWindowMsg;
     type Output = ();
 
@@ -41,9 +47,13 @@ impl SimpleComponent for MainWindow {
         adw::ApplicationWindow {
             #[watch]
             set_title: Some(&{
-                let verifying_key = model.signing_key.verifying_key();
+                model.signing_key.as_ref()
+                    .map(|signing_key| {
+                        let verifying_key = signing_key.verifying_key();
 
-                format!("@{}", verifying_key.to_base64())
+                        format!("@{}", verifying_key.to_base64())
+                    })
+                    .unwrap_or_else(|| String::from("Garden"))
             }),
 
             set_size_request: (1000, 700),
@@ -59,26 +69,11 @@ impl SimpleComponent for MainWindow {
                         adw::ButtonContent {
                             set_label: "Create post",
                             set_icon_name: "chat-message-new-symbolic"
-                        }
+                        },
+
+                        connect_clicked => MainWindowMsg::OpenCreatePostDialog
                     }
                 },
-
-                // adw::Clamp {
-                //     set_margin_top: 16,
-
-                //     gtk::Box {
-                //         set_orientation: gtk::Orientation::Horizontal,
-
-                //         gtk::Button {
-                //             add_css_class: "pill",
-
-                //             adw::ButtonContent {
-                //                 set_label: "Create post",
-                //                 set_icon_name: "chat-message-new-symbolic"
-                //             }
-                //         }
-                //     }
-                // },
 
                 gtk::ScrolledWindow {
                     set_vexpand: true,
@@ -91,7 +86,7 @@ impl SimpleComponent for MainWindow {
                         gtk::ListBox {
                             set_selection_mode: gtk::SelectionMode::None,
 
-                            add_css_class: "boxed-list",
+                            add_css_class: "boxed-list-separate",
 
                             adw::Bin {
                                 gtk::Box {
@@ -123,6 +118,7 @@ impl SimpleComponent for MainWindow {
                                         set_justify: gtk::Justification::Fill,
 
                                         set_wrap: true,
+                                        set_wrap_mode: gtk::pango::WrapMode::WordChar,
 
                                         set_label: "Hello, World!"
                                     },
@@ -159,6 +155,7 @@ impl SimpleComponent for MainWindow {
                                         set_justify: gtk::Justification::Fill,
 
                                         set_wrap: true,
+                                        set_wrap_mode: gtk::pango::WrapMode::WordChar,
 
                                         set_label: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Placerat in id cursus mi pretium tellus duis. Urna tempor pulvinar vivamus fringilla lacus nec metus. Integer nunc posuere ut hendrerit semper vel class. Conubia nostra inceptos himenaeos orci varius natoque penatibus. Mus donec rhoncus eros lobortis nulla molestie mattis. Purus est efficitur laoreet mauris pharetra vestibulum fusce. Sodales consequat magna ante condimentum neque at luctus. Ligula congue sollicitudin erat viverra ac tincidunt nam. Lectus commodo augue arcu dignissim velit aliquam imperdiet. Cras eleifend turpis fames primis vulputate ornare sagittis. Libero feugiat tristique accumsan maecenas potenti ultricies habitant. Cubilia curae hac habitasse platea dictumst lorem ipsum. Faucibus ex sapien vitae pellentesque sem placerat in. Tempus leo eu aenean sed diam urna tempor."
                                     },
@@ -195,6 +192,7 @@ impl SimpleComponent for MainWindow {
                                         set_justify: gtk::Justification::Fill,
 
                                         set_wrap: true,
+                                        set_wrap_mode: gtk::pango::WrapMode::WordChar,
 
                                         set_label: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Urna tempor pulvinar vivamus fringilla lacus nec metus. Conubia nostra inceptos himenaeos orci varius natoque penatibus. Purus est efficitur laoreet mauris pharetra vestibulum fusce. Ligula congue sollicitudin erat viverra ac tincidunt nam. Cras eleifend turpis fames primis vulputate ornare sagittis. Cubilia curae hac habitasse platea dictumst lorem ipsum. Tempus leo eu aenean sed diam urna tempor. Taciti sociosqu ad litora torquent per conubia nostra. Maximus eget fermentum odio phasellus non purus est. Finibus facilisis dapibus etiam interdum tortor ligula congue. Nullam volutpat porttitor ullamcorper rutrum gravida cras eleifend. Senectus netus suscipit auctor curabitur facilisi cubilia curae. Cursus mi pretium tellus duis convallis tempus leo. Ut hendrerit semper vel class aptent taciti sociosqu. Eros lobortis nulla molestie mattis scelerisque maximus eget. Ante condimentum neque at luctus nibh finibus facilisis. Arcu dignissim velit aliquam imperdiet mollis nullam volutpat. Accumsan maecenas potenti ultricies habitant morbi senectus netus. Vitae pellentesque sem placerat in id cursus mi. Nisl malesuada lacinia integer nunc posuere ut hendrerit. Montes nascetur ridiculus mus donec rhoncus eros lobortis. Suspendisse aliquet nisi sodales consequat magna ante condimentum. Euismod quam justo lectus commodo augue arcu dignissim. Venenatis ultrices proin libero feugiat tristique accumsan maecenas. Adipiscing elit quisque faucibus ex sapien vitae pellentesque. Nec metus bibendum egestas iaculis massa nisl malesuada. Natoque penatibus et magnis dis parturient montes nascetur. Vestibulum fusce dictum risus blandit quis suspendisse aliquet. Tincidunt nam porta elementum a enim euismod quam."
                                     },
@@ -231,6 +229,7 @@ impl SimpleComponent for MainWindow {
                                         set_justify: gtk::Justification::Fill,
 
                                         set_wrap: true,
+                                        set_wrap_mode: gtk::pango::WrapMode::WordChar,
 
                                         set_label: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Urna tempor pulvinar vivamus fringilla lacus nec metus. Conubia nostra inceptos himenaeos orci varius natoque penatibus. Purus est efficitur laoreet mauris pharetra vestibulum fusce. Ligula congue sollicitudin erat viverra ac tincidunt nam. Cras eleifend turpis fames primis vulputate ornare sagittis. Cubilia curae hac habitasse platea dictumst lorem ipsum. Tempus leo eu aenean sed diam urna tempor. Taciti sociosqu ad litora torquent per conubia nostra. Maximus eget fermentum odio phasellus non purus est. Finibus facilisis dapibus etiam interdum tortor ligula congue. Nullam volutpat porttitor ullamcorper rutrum gravida cras eleifend. Senectus netus suscipit auctor curabitur facilisi cubilia curae. Cursus mi pretium tellus duis convallis tempus leo. Ut hendrerit semper vel class aptent taciti sociosqu. Eros lobortis nulla molestie mattis scelerisque maximus eget. Ante condimentum neque at luctus nibh finibus facilisis. Arcu dignissim velit aliquam imperdiet mollis nullam volutpat. Accumsan maecenas potenti ultricies habitant morbi senectus netus. Vitae pellentesque sem placerat in id cursus mi. Nisl malesuada lacinia integer nunc posuere ut hendrerit. Montes nascetur ridiculus mus donec rhoncus eros lobortis. Suspendisse aliquet nisi sodales consequat magna ante condimentum. Euismod quam justo lectus commodo augue arcu dignissim. Venenatis ultrices proin libero feugiat tristique accumsan maecenas. Adipiscing elit quisque faucibus ex sapien vitae pellentesque. Nec metus bibendum egestas iaculis massa nisl malesuada. Natoque penatibus et magnis dis parturient montes nascetur. Vestibulum fusce dictum risus blandit quis suspendisse aliquet. Tincidunt nam porta elementum a enim euismod quam."
                                     },
@@ -244,12 +243,18 @@ impl SimpleComponent for MainWindow {
     }
 
     fn init(
-        init: Self::Init,
+        _init: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
         let model = Self {
-            signing_key: init
+            signing_key: None,
+
+            window: root.clone(),
+
+            create_post_dialog: CreatePostDialog::builder()
+                .launch(())
+                .detach()
         };
 
         let widgets = view_output!();
@@ -263,7 +268,14 @@ impl SimpleComponent for MainWindow {
         _sender: ComponentSender<Self>
     ) {
         match message {
+            MainWindowMsg::SetSigningKey(signing_key) => {
+                self.signing_key = Some(signing_key);
+            }
 
+            MainWindowMsg::OpenCreatePostDialog => {
+                self.create_post_dialog.widget()
+                    .present(Some(&self.window));
+            }
         }
     }
 }

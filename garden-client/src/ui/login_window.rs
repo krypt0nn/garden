@@ -25,7 +25,7 @@ use crate::accounts::Account;
 
 use crate::ui::new_account_dialog::{NewAccountDialog, NewAccountDialogMsg};
 use crate::ui::login_account_dialog::{LoginAccountDialog, LoginAccountDialogMsg};
-use crate::ui::main_window::MainWindow;
+use crate::ui::main_window::{MainWindow, MainWindowMsg};
 
 #[derive(Debug, Clone)]
 pub enum LoginWindowAccountFactoryMsg {
@@ -117,7 +117,8 @@ pub struct LoginWindow {
     window: adw::ApplicationWindow,
     accounts_factory: FactoryVecDeque<LoginWindowAccountFactory>,
     new_account_dialog: Controller<NewAccountDialog>,
-    login_account_dialog: Controller<LoginAccountDialog>
+    login_account_dialog: Controller<LoginAccountDialog>,
+    main_window: Controller<MainWindow>
 }
 
 #[relm4::component(pub)]
@@ -212,7 +213,11 @@ impl SimpleComponent for LoginWindow {
 
             login_account_dialog: LoginAccountDialog::builder()
                 .launch(())
-                .forward(sender.input_sender(), LoginWindowMsg::Login)
+                .forward(sender.input_sender(), LoginWindowMsg::Login),
+
+            main_window: MainWindow::builder()
+                .launch(())
+                .detach()
         };
 
         for account in init {
@@ -292,14 +297,11 @@ impl SimpleComponent for LoginWindow {
             }
 
             LoginWindowMsg::Login(signing_key) => {
-                let main_window = MainWindow::builder()
-                    .launch(signing_key)
-                    .detach();
-
                 relm4::main_adw_application()
-                    .add_window(main_window.widget());
+                    .add_window(self.main_window.widget());
 
-                main_window.widget().present();
+                self.main_window.emit(MainWindowMsg::SetSigningKey(signing_key));
+                self.main_window.widget().present();
 
                 self.window.close();
             }

@@ -21,15 +21,32 @@ use relm4::prelude::*;
 
 use flowerpot::crypto::sign::SigningKey;
 
+use garden_protocol::handler::Handler;
+
+use crate::node::Progress as StartNodeProgress;
+
 use crate::ui::create_post_dialog::CreatePostDialog;
+
+pub enum HandlerStatus {
+    /// Flowerpot node is not started and handler is not available.
+    None,
+
+    /// Starting the flowerpot node.
+    StartNode(StartNodeProgress),
+
+    /// Handler is available.
+    Handler(Handler)
+}
 
 #[derive(Debug, Clone)]
 pub enum MainWindowMsg {
+    StartHandler,
     SetSigningKey(SigningKey),
     OpenCreatePostDialog
 }
 
 pub struct MainWindow {
+    handler: HandlerStatus,
     signing_key: Option<SigningKey>,
 
     window: adw::ApplicationWindow,
@@ -63,6 +80,52 @@ impl SimpleComponent for MainWindow {
 
             gtk::Box {
                 set_orientation: gtk::Orientation::Vertical,
+
+                #[watch]
+                set_visible: !matches!(model.handler, HandlerStatus::Handler(_)),
+
+                adw::HeaderBar,
+
+                adw::StatusPage {
+                    set_title: "Starting flowerpot node",
+
+                    #[watch]
+                    set_description: match &model.handler {
+                        HandlerStatus::None |
+                        HandlerStatus::Handler(_) => Some(String::new()),
+
+                        HandlerStatus::StartNode(progress) => {
+                            match progress {
+                                StartNodeProgress::CreateTracker(path)
+                                    => Some(format!("Open blockchain storage at {path:?}")),
+
+                                StartNodeProgress::EstablishConnection(addr)
+                                    => Some(format!("Connecting to {addr}")),
+
+                                StartNodeProgress::SynchronizeBlockchain
+                                    => Some(String::from("Synchronizing blockchain")),
+
+                                StartNodeProgress::StartNode
+                                    => Some(String::from("Starting flowerpot node")),
+
+                                StartNodeProgress::StartListener(addr)
+                                    => Some(format!("Starting listener at {addr}"))
+                            }
+                        }
+                    }.as_deref(),
+
+                    set_icon_name: Some("com.github.krypt0nn.garden"),
+
+                    set_vexpand: true,
+                    set_valign: gtk::Align::Center
+                },
+            },
+
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+
+                #[watch]
+                set_visible: matches!(model.handler, HandlerStatus::Handler(_)),
 
                 adw::HeaderBar {
                     pack_end = &gtk::Button {
@@ -248,6 +311,7 @@ impl SimpleComponent for MainWindow {
         _sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
         let model = Self {
+            handler: HandlerStatus::None,
             signing_key: None,
 
             window: root.clone(),
@@ -268,6 +332,35 @@ impl SimpleComponent for MainWindow {
         _sender: ComponentSender<Self>
     ) {
         match message {
+            MainWindowMsg::StartHandler => {
+                let (send, recv) = std::sync::mpsc::channel();
+
+                // TODO: error handling.
+
+                let config = crate::config::read()
+                    .expect("failed to read config");
+
+                let root_block = config.blockchain_root_block;
+
+                let handle = std::thread::spawn(move || {
+                    crate::node::start(&config, |progress| {
+                        let _ = send.send(HandlerStatus::StartNode(progress));
+                    })
+                });
+
+                while let Ok(status) = recv.recv() {
+                    self.handler = status;
+                }
+
+                let handler = handle.join()
+                    .expect("failed to join flowerpot node starting thread")
+                    .expect("failed to start flowerpot node");
+
+                let handler = Handler::new(root_block, handler);
+
+                self.handler = HandlerStatus::Handler(handler);
+            }
+
             MainWindowMsg::SetSigningKey(signing_key) => {
                 self.signing_key = Some(signing_key);
             }

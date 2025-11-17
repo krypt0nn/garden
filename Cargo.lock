@@ -343,7 +343,7 @@ checksum = "3a3076410a55c90011c298b04d0cfa770b00fa04e1e3c97d3f6c9de105a03844"
 [[package]]
 name = "flowerpot"
 version = "0.1.0"
-source = "git+https://github.com/krypt0nn/flowerpot#ad817295036b949ee648f61ee6a20119355a1769"
+source = "git+https://github.com/krypt0nn/flowerpot#08ecca17a04763d3dbccbc3a426ef9b643b54d76"
 dependencies = [
  "base64",
  "blake3",

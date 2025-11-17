@@ -19,18 +19,20 @@
 use adw::prelude::*;
 use relm4::prelude::*;
 
+use flowerpot::crypto::sign::SigningKey;
+
 #[derive(Debug, Clone)]
 pub enum MainWindowMsg {
 
 }
 
 pub struct MainWindow {
-
+    signing_key: SigningKey
 }
 
 #[relm4::component(pub)]
 impl SimpleComponent for MainWindow {
-    type Init = ();
+    type Init = SigningKey;
     type Input = MainWindowMsg;
     type Output = ();
 
@@ -213,12 +215,12 @@ impl SimpleComponent for MainWindow {
     }
 
     fn init(
-        _init: Self::Init,
+        init: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
         let model = Self {
-
+            signing_key: init
         };
 
         let widgets = view_output!();

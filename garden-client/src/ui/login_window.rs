@@ -25,6 +25,7 @@ use crate::accounts::Account;
 
 use crate::ui::new_account_dialog::{NewAccountDialog, NewAccountDialogMsg};
 use crate::ui::login_account_dialog::{LoginAccountDialog, LoginAccountDialogMsg};
+use crate::ui::main_window::MainWindow;
 
 #[derive(Debug, Clone)]
 pub enum LoginWindowAccountFactoryMsg {
@@ -291,7 +292,16 @@ impl SimpleComponent for LoginWindow {
             }
 
             LoginWindowMsg::Login(signing_key) => {
-                println!("{}", signing_key.to_base64());
+                let main_window = MainWindow::builder()
+                    .launch(signing_key)
+                    .detach();
+
+                relm4::main_adw_application()
+                    .add_window(main_window.widget());
+
+                main_window.widget().present();
+
+                self.window.close();
             }
         }
     }

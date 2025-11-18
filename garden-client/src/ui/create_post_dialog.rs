@@ -29,6 +29,7 @@ pub enum CreatePostDialogMsg {
 }
 
 pub struct CreatePostDialog {
+    window: adw::Dialog,
     text_view: gtk::TextView,
 
     is_content_valid: bool
@@ -128,6 +129,7 @@ impl SimpleComponent for CreatePostDialog {
         _sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
         let model = Self {
+            window: root.clone(),
             text_view: gtk::TextView::new(),
 
             is_content_valid: true
@@ -175,6 +177,8 @@ impl SimpleComponent for CreatePostDialog {
 
                 if let Some(event) = PostEvent::new(content, []) {
                     let _ = sender.output(event);
+
+                    self.window.close();
                 }
             }
         }

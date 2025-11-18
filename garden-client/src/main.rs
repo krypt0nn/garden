@@ -60,6 +60,7 @@ lazy_static::lazy_static! {
         path.canonicalize().unwrap_or(path)
     };
 
+    pub static ref LOG_FILE_PATH: PathBuf        = DATA_FOLDER_PATH.join("debug.log");
     pub static ref CONFIG_FILE_PATH: PathBuf     = DATA_FOLDER_PATH.join("config.json");
     pub static ref ACCOUNTS_FILE_PATH: PathBuf   = DATA_FOLDER_PATH.join("accounts.json");
     pub static ref STORAGES_FOLDER_PATH: PathBuf = DATA_FOLDER_PATH.join("blockchain");
@@ -77,6 +78,22 @@ fn main() -> anyhow::Result<()> {
         std::fs::create_dir_all(STORAGES_FOLDER_PATH.as_path())
             .context("failed to create flowerpot blockchains folder")?;
     }
+
+    // Create log file folder.
+    if let Some(parent) = LOG_FILE_PATH.parent() {
+        std::fs::create_dir_all(parent)
+            .context("failed to create log file's parent folder")?;
+    }
+
+    // Setup debug logger.
+    let file = std::fs::File::create(LOG_FILE_PATH.as_path())
+        .context("failed to create log file")?;
+
+    tracing_subscriber::fmt()
+        .with_writer(file)
+        .with_ansi(false)
+        .with_max_level(tracing_subscriber::filter::LevelFilter::TRACE)
+        .init();
 
     // Read config file and update it immediately (in case it was changed).
     let config = config::read()

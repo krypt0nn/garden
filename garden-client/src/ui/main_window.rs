@@ -21,11 +21,79 @@ use relm4::prelude::*;
 
 use flowerpot::crypto::sign::SigningKey;
 
+use garden_protocol::index::post::PostInfo;
 use garden_protocol::handler::Handler;
 
 use crate::node::Progress as StartNodeProgress;
 
 use crate::ui::create_post_dialog::CreatePostDialog;
+
+#[derive(Debug)]
+struct MainWindowPostFactory {
+    post: PostInfo,
+    index: DynamicIndex
+}
+
+#[relm4::factory]
+impl FactoryComponent for MainWindowPostFactory {
+    type Init = PostInfo;
+    type Input = ();
+    type Output = ();
+    type CommandOutput = ();
+    type ParentWidget = gtk::ListBox;
+
+    view! {
+        #[root]
+        adw::Bin {
+            gtk::Box {
+                set_orientation: gtk::Orientation::Vertical,
+
+                set_margin_all: 8,
+
+                gtk::Box {
+                    set_orientation: gtk::Orientation::Horizontal,
+
+                    gtk::Label {
+                        set_hexpand: true,
+                        set_halign: gtk::Align::Start,
+
+                        set_label: &format!("@{}", self.post.author.to_base64())
+                    },
+
+                    gtk::Label {
+                        set_hexpand: true,
+                        set_halign: gtk::Align::End,
+
+                        set_label: &self.post.timestamp.to_string()
+                    },
+                },
+
+                gtk::Label {
+                    set_hexpand: true,
+                    set_halign: gtk::Align::Start,
+                    set_justify: gtk::Justification::Fill,
+
+                    set_wrap: true,
+                    set_wrap_mode: gtk::pango::WrapMode::WordChar,
+
+                    set_label: &self.post.content
+                },
+            }
+        }
+    }
+
+    #[inline]
+    fn init_model(
+        init: Self::Init,
+        index: &DynamicIndex,
+        _sender: FactorySender<Self>
+    ) -> Self {
+        Self {
+            post: init,
+            index: index.clone()
+        }
+    }
+}
 
 pub enum HandlerStatus {
     /// Flowerpot node is not started and handler is not available.
@@ -50,6 +118,7 @@ pub struct MainWindow {
     signing_key: Option<SigningKey>,
 
     window: adw::ApplicationWindow,
+    posts_factory: FactoryVecDeque<MainWindowPostFactory>,
     create_post_dialog: Controller<CreatePostDialog>
 }
 
@@ -146,158 +215,11 @@ impl SimpleComponent for MainWindow {
                     set_margin_bottom: 16,
 
                     adw::Clamp {
-                        gtk::ListBox {
+                        #[local_ref]
+                        posts_factory -> gtk::ListBox {
                             set_selection_mode: gtk::SelectionMode::None,
 
-                            add_css_class: "boxed-list-separate",
-
-                            adw::Bin {
-                                gtk::Box {
-                                    set_orientation: gtk::Orientation::Vertical,
-
-                                    set_margin_all: 8,
-
-                                    gtk::Box {
-                                        set_orientation: gtk::Orientation::Horizontal,
-
-                                        gtk::Label {
-                                            set_hexpand: true,
-                                            set_halign: gtk::Align::Start,
-
-                                            set_label: "@amogus"
-                                        },
-
-                                        gtk::Label {
-                                            set_hexpand: true,
-                                            set_halign: gtk::Align::End,
-
-                                            set_label: "Nov 17, 00:59"
-                                        },
-                                    },
-
-                                    gtk::Label {
-                                        set_hexpand: true,
-                                        set_halign: gtk::Align::Start,
-                                        set_justify: gtk::Justification::Fill,
-
-                                        set_wrap: true,
-                                        set_wrap_mode: gtk::pango::WrapMode::WordChar,
-
-                                        set_label: "Hello, World!"
-                                    },
-                                }
-                            },
-
-                            adw::Bin {
-                                gtk::Box {
-                                    set_orientation: gtk::Orientation::Vertical,
-
-                                    set_margin_all: 8,
-
-                                    gtk::Box {
-                                        set_orientation: gtk::Orientation::Horizontal,
-
-                                        gtk::Label {
-                                            set_hexpand: true,
-                                            set_halign: gtk::Align::Start,
-
-                                            set_label: "@amogus"
-                                        },
-
-                                        gtk::Label {
-                                            set_hexpand: true,
-                                            set_halign: gtk::Align::End,
-
-                                            set_label: "Nov 17, 00:59"
-                                        },
-                                    },
-
-                                    gtk::Label {
-                                        set_hexpand: true,
-                                        set_halign: gtk::Align::Start,
-                                        set_justify: gtk::Justification::Fill,
-
-                                        set_wrap: true,
-                                        set_wrap_mode: gtk::pango::WrapMode::WordChar,
-
-                                        set_label: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Placerat in id cursus mi pretium tellus duis. Urna tempor pulvinar vivamus fringilla lacus nec metus. Integer nunc posuere ut hendrerit semper vel class. Conubia nostra inceptos himenaeos orci varius natoque penatibus. Mus donec rhoncus eros lobortis nulla molestie mattis. Purus est efficitur laoreet mauris pharetra vestibulum fusce. Sodales consequat magna ante condimentum neque at luctus. Ligula congue sollicitudin erat viverra ac tincidunt nam. Lectus commodo augue arcu dignissim velit aliquam imperdiet. Cras eleifend turpis fames primis vulputate ornare sagittis. Libero feugiat tristique accumsan maecenas potenti ultricies habitant. Cubilia curae hac habitasse platea dictumst lorem ipsum. Faucibus ex sapien vitae pellentesque sem placerat in. Tempus leo eu aenean sed diam urna tempor."
-                                    },
-                                }
-                            },
-
-                            adw::Bin {
-                                gtk::Box {
-                                    set_orientation: gtk::Orientation::Vertical,
-
-                                    set_margin_all: 8,
-
-                                    gtk::Box {
-                                        set_orientation: gtk::Orientation::Horizontal,
-
-                                        gtk::Label {
-                                            set_hexpand: true,
-                                            set_halign: gtk::Align::Start,
-
-                                            set_label: "@amogus"
-                                        },
-
-                                        gtk::Label {
-                                            set_hexpand: true,
-                                            set_halign: gtk::Align::End,
-
-                                            set_label: "Nov 17, 00:59"
-                                        },
-                                    },
-
-                                    gtk::Label {
-                                        set_hexpand: true,
-                                        set_halign: gtk::Align::Start,
-                                        set_justify: gtk::Justification::Fill,
-
-                                        set_wrap: true,
-                                        set_wrap_mode: gtk::pango::WrapMode::WordChar,
-
-                                        set_label: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Urna tempor pulvinar vivamus fringilla lacus nec metus. Conubia nostra inceptos himenaeos orci varius natoque penatibus. Purus est efficitur laoreet mauris pharetra vestibulum fusce. Ligula congue sollicitudin erat viverra ac tincidunt nam. Cras eleifend turpis fames primis vulputate ornare sagittis. Cubilia curae hac habitasse platea dictumst lorem ipsum. Tempus leo eu aenean sed diam urna tempor. Taciti sociosqu ad litora torquent per conubia nostra. Maximus eget fermentum odio phasellus non purus est. Finibus facilisis dapibus etiam interdum tortor ligula congue. Nullam volutpat porttitor ullamcorper rutrum gravida cras eleifend. Senectus netus suscipit auctor curabitur facilisi cubilia curae. Cursus mi pretium tellus duis convallis tempus leo. Ut hendrerit semper vel class aptent taciti sociosqu. Eros lobortis nulla molestie mattis scelerisque maximus eget. Ante condimentum neque at luctus nibh finibus facilisis. Arcu dignissim velit aliquam imperdiet mollis nullam volutpat. Accumsan maecenas potenti ultricies habitant morbi senectus netus. Vitae pellentesque sem placerat in id cursus mi. Nisl malesuada lacinia integer nunc posuere ut hendrerit. Montes nascetur ridiculus mus donec rhoncus eros lobortis. Suspendisse aliquet nisi sodales consequat magna ante condimentum. Euismod quam justo lectus commodo augue arcu dignissim. Venenatis ultrices proin libero feugiat tristique accumsan maecenas. Adipiscing elit quisque faucibus ex sapien vitae pellentesque. Nec metus bibendum egestas iaculis massa nisl malesuada. Natoque penatibus et magnis dis parturient montes nascetur. Vestibulum fusce dictum risus blandit quis suspendisse aliquet. Tincidunt nam porta elementum a enim euismod quam."
-                                    },
-                                }
-                            },
-
-                            adw::Bin {
-                                gtk::Box {
-                                    set_orientation: gtk::Orientation::Vertical,
-
-                                    set_margin_all: 8,
-
-                                    gtk::Box {
-                                        set_orientation: gtk::Orientation::Horizontal,
-
-                                        gtk::Label {
-                                            set_hexpand: true,
-                                            set_halign: gtk::Align::Start,
-
-                                            set_label: "@amogus"
-                                        },
-
-                                        gtk::Label {
-                                            set_hexpand: true,
-                                            set_halign: gtk::Align::End,
-
-                                            set_label: "Nov 17, 00:59"
-                                        },
-                                    },
-
-                                    gtk::Label {
-                                        set_hexpand: true,
-                                        set_halign: gtk::Align::Start,
-                                        set_justify: gtk::Justification::Fill,
-
-                                        set_wrap: true,
-                                        set_wrap_mode: gtk::pango::WrapMode::WordChar,
-
-                                        set_label: "Lorem ipsum dolor sit amet consectetur adipiscing elit. Urna tempor pulvinar vivamus fringilla lacus nec metus. Conubia nostra inceptos himenaeos orci varius natoque penatibus. Purus est efficitur laoreet mauris pharetra vestibulum fusce. Ligula congue sollicitudin erat viverra ac tincidunt nam. Cras eleifend turpis fames primis vulputate ornare sagittis. Cubilia curae hac habitasse platea dictumst lorem ipsum. Tempus leo eu aenean sed diam urna tempor. Taciti sociosqu ad litora torquent per conubia nostra. Maximus eget fermentum odio phasellus non purus est. Finibus facilisis dapibus etiam interdum tortor ligula congue. Nullam volutpat porttitor ullamcorper rutrum gravida cras eleifend. Senectus netus suscipit auctor curabitur facilisi cubilia curae. Cursus mi pretium tellus duis convallis tempus leo. Ut hendrerit semper vel class aptent taciti sociosqu. Eros lobortis nulla molestie mattis scelerisque maximus eget. Ante condimentum neque at luctus nibh finibus facilisis. Arcu dignissim velit aliquam imperdiet mollis nullam volutpat. Accumsan maecenas potenti ultricies habitant morbi senectus netus. Vitae pellentesque sem placerat in id cursus mi. Nisl malesuada lacinia integer nunc posuere ut hendrerit. Montes nascetur ridiculus mus donec rhoncus eros lobortis. Suspendisse aliquet nisi sodales consequat magna ante condimentum. Euismod quam justo lectus commodo augue arcu dignissim. Venenatis ultrices proin libero feugiat tristique accumsan maecenas. Adipiscing elit quisque faucibus ex sapien vitae pellentesque. Nec metus bibendum egestas iaculis massa nisl malesuada. Natoque penatibus et magnis dis parturient montes nascetur. Vestibulum fusce dictum risus blandit quis suspendisse aliquet. Tincidunt nam porta elementum a enim euismod quam."
-                                    },
-                                }
-                            }
+                            add_css_class: "boxed-list-separate"
                         }
                     }
                 }
@@ -316,10 +238,16 @@ impl SimpleComponent for MainWindow {
 
             window: root.clone(),
 
+            posts_factory: FactoryVecDeque::builder()
+                .launch_default()
+                .detach(),
+
             create_post_dialog: CreatePostDialog::builder()
                 .launch(())
                 .detach()
         };
+
+        let posts_factory = model.posts_factory.widget();
 
         let widgets = view_output!();
 

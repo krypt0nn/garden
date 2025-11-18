@@ -78,6 +78,7 @@ impl SimpleComponent for CreatePostDialog {
 
                             adw::Bin {
                                 set_margin_top: 8,
+                                set_margin_bottom: 2,
 
                                 add_css_class: "card",
 

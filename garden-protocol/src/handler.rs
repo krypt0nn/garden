@@ -127,6 +127,8 @@ impl Handler {
     ) -> Result<(), SignatureError> {
         let message = Message::create(signing_key, event.to_bytes())?;
 
+        dbg!(self.node.streams());
+
         self.node.send_message(self.root_block.as_ref(), message);
 
         Ok(())

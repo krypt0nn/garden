@@ -102,6 +102,9 @@ impl Index {
         if self.root_block != root_block
             || !storage.has_block(&self.last_block)?
         {
+            #[cfg(feature = "tracing")]
+            tracing::debug!("blockchain storage was changed, resetting the garden index");
+
             self.last_block = Hash::ZERO;
 
             self.posts.clear();
@@ -119,6 +122,14 @@ impl Index {
 
             // Iterate over stored messages.
             for message in block.messages() {
+                #[cfg(feature = "tracing")]
+                tracing::debug!(
+                    root_block = root_block.to_base64(),
+                    block_hash = block.hash().to_base64(),
+                    message_hash = message.hash().to_base64(),
+                    "update garden index"
+                );
+
                 match Events::from_bytes(message.data())? {
                     Events::Post(_) => {
                         self.posts.push(PostIndex {

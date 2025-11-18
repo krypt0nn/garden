@@ -6,9 +6,14 @@ license = "GPL-3.0-or-later"
 edition = "2024"
 publish = false
 
+[features]
+tracing = ["dep:tracing"]
+default = ["tracing"]
+
 [dependencies]
 flowerpot = { git = "https://github.com/krypt0nn/flowerpot" }
 thiserror = "2.0"
+tracing = { version = "0.1", optional = true }
 lazy_static = "1.5.0"
 spin = "0.10"
 regex = "1.11"

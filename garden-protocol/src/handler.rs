@@ -127,8 +127,6 @@ impl Handler {
     ) -> Result<(), SignatureError> {
         let message = Message::create(signing_key, event.to_bytes())?;
 
-        dbg!(self.node.streams());
-
         self.node.send_message(self.root_block.as_ref(), message);
 
         Ok(())
@@ -154,5 +152,13 @@ impl Handler {
         comment: CommentEvent
     ) -> Result<(), SignatureError> {
         self.send_event(signing_key, &Events::from(comment))
+    }
+}
+
+impl std::fmt::Debug for Handler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Handler")
+            .field("root_block", &self.root_block.to_base64())
+            .finish()
     }
 }

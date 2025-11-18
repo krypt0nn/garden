@@ -19,14 +19,20 @@
 use adw::prelude::*;
 use relm4::prelude::*;
 
-use garden_protocol::PostEvent;
+use garden_protocol::{Content, PostEvent};
 
 #[derive(Debug, Clone)]
 pub enum CreatePostDialogMsg {
-
+    Reset,
+    VerifyContent,
+    Publish
 }
 
-pub struct CreatePostDialog;
+pub struct CreatePostDialog {
+    text_view: gtk::TextView,
+
+    is_content_valid: bool
+}
 
 #[relm4::component(pub)]
 impl SimpleComponent for CreatePostDialog {
@@ -48,12 +54,22 @@ impl SimpleComponent for CreatePostDialog {
                     add_css_class: "flat",
 
                     pack_end = &gtk::Button {
-                        add_css_class: "suggested-action",
+                        #[watch]
+                        set_css_classes: if model.is_content_valid {
+                            &["suggested-action"]
+                        } else {
+                            &[]
+                        },
+
+                        #[watch]
+                        set_sensitive: model.is_content_valid,
 
                         adw::ButtonContent {
                             set_label: "Publish",
                             set_icon_name: "chat-message-new-symbolic"
-                        }
+                        },
+
+                        connect_clicked => CreatePostDialogMsg::Publish
                     }
                 },
 
@@ -82,7 +98,8 @@ impl SimpleComponent for CreatePostDialog {
 
                                 add_css_class: "card",
 
-                                gtk::TextView {
+                                #[local_ref]
+                                text_view -> gtk::TextView {
                                     set_vexpand: true,
                                     set_hexpand: true,
 
@@ -90,7 +107,12 @@ impl SimpleComponent for CreatePostDialog {
 
                                     add_css_class: "inline",
 
-                                    set_wrap_mode: gtk::WrapMode::WordChar
+                                    set_wrap_mode: gtk::WrapMode::WordChar,
+
+                                    #[wrap(Some)]
+                                    set_buffer = &gtk::TextBuffer {
+                                        connect_changed => CreatePostDialogMsg::VerifyContent
+                                    }
                                 }
                             }
                         }
@@ -105,7 +127,13 @@ impl SimpleComponent for CreatePostDialog {
         root: Self::Root,
         _sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
-        let model = Self;
+        let model = Self {
+            text_view: gtk::TextView::new(),
+
+            is_content_valid: true
+        };
+
+        let text_view = &model.text_view;
 
         let widgets = view_output!();
 
@@ -115,10 +143,40 @@ impl SimpleComponent for CreatePostDialog {
     fn update(
         &mut self,
         message: Self::Input,
-        _sender: ComponentSender<Self>
+        sender: ComponentSender<Self>
     ) {
         match message {
+            CreatePostDialogMsg::Reset => {
+                self.text_view.buffer().set_text("");
 
+                self.is_content_valid = true;
+            }
+
+            CreatePostDialogMsg::VerifyContent => {
+                let content = self.text_view.buffer().text(
+                    &self.text_view.buffer().start_iter(),
+                    &self.text_view.buffer().end_iter(),
+                    true
+                );
+
+                self.is_content_valid = Content::new(content).is_some();
+            }
+
+            CreatePostDialogMsg::Publish => {
+                let content = self.text_view.buffer().text(
+                    &self.text_view.buffer().start_iter(),
+                    &self.text_view.buffer().end_iter(),
+                    true
+                );
+
+                let Some(content) = Content::new(content) else {
+                    return;
+                };
+
+                if let Some(event) = PostEvent::new(content, []) {
+                    let _ = sender.output(event);
+                }
+            }
         }
     }
 }

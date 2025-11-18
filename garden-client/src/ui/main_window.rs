@@ -21,6 +21,7 @@ use relm4::prelude::*;
 
 use flowerpot::crypto::sign::SigningKey;
 
+use garden_protocol::PostEvent;
 use garden_protocol::index::post::PostInfo;
 use garden_protocol::handler::Handler;
 
@@ -110,7 +111,8 @@ pub enum HandlerStatus {
 pub enum MainWindowMsg {
     StartHandler,
     SetSigningKey(SigningKey),
-    OpenCreatePostDialog
+    OpenCreatePostDialog,
+    PublishPost(PostEvent)
 }
 
 pub struct MainWindow {
@@ -230,7 +232,7 @@ impl SimpleComponent for MainWindow {
     fn init(
         _init: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>
+        sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
         let model = Self {
             handler: HandlerStatus::None,
@@ -244,7 +246,7 @@ impl SimpleComponent for MainWindow {
 
             create_post_dialog: CreatePostDialog::builder()
                 .launch(())
-                .detach()
+                .forward(sender.input_sender(), MainWindowMsg::PublishPost)
         };
 
         let posts_factory = model.posts_factory.widget();
@@ -310,6 +312,10 @@ impl SimpleComponent for MainWindow {
             MainWindowMsg::OpenCreatePostDialog => {
                 self.create_post_dialog.widget()
                     .present(Some(&self.window));
+            }
+
+            MainWindowMsg::PublishPost(event) => {
+                dbg!(event);
             }
         }
     }

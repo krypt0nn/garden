@@ -99,7 +99,9 @@ pub fn start(
             PacketStreamEncryption::ChaCha20,
             PacketStreamEncryption::ChaCha12,
             PacketStreamEncryption::ChaCha8
-        ]
+        ],
+
+        force_encryption: true
     };
 
     // Establish connections.

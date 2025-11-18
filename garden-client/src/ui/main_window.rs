@@ -315,7 +315,14 @@ impl SimpleComponent for MainWindow {
             }
 
             MainWindowMsg::PublishPost(event) => {
-                dbg!(event);
+                if let Some(signing_key) = &self.signing_key
+                    && let HandlerStatus::Handler(handler) = &self.handler
+                {
+                    // TODO: handle error.
+
+                    handler.send_post(signing_key, event)
+                        .expect("failed to send post to the flowerpot network");
+                }
             }
         }
     }

@@ -489,6 +489,7 @@ dependencies = [
  "serde_json",
  "spin 0.10.0",
  "time",
+ "tracing",
  "tracing-subscriber",
 ]
 

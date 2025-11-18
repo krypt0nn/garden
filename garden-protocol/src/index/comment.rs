@@ -71,6 +71,21 @@ pub struct CommentIndex {
 }
 
 impl CommentIndex {
+    #[inline]
+    pub const fn block_hash(&self) -> &Hash {
+        &self.block_hash
+    }
+
+    #[inline]
+    pub const fn message_hash(&self) -> &Hash {
+        &self.message_hash
+    }
+
+    #[inline]
+    pub const fn ref_message_hash(&self) -> &Hash {
+        &self.ref_message_hash
+    }
+
     /// Try to read indexed post comment from provided flowerpot blockchain
     /// storage.
     pub fn read(

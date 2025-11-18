@@ -63,6 +63,16 @@ pub struct PostIndex {
 }
 
 impl PostIndex {
+    #[inline]
+    pub const fn block_hash(&self) -> &Hash {
+        &self.block_hash
+    }
+
+    #[inline]
+    pub const fn message_hash(&self) -> &Hash {
+        &self.message_hash
+    }
+
     /// Try to read indexed post from provided flowerpot blockchain storage.
     pub fn read(
         &self,

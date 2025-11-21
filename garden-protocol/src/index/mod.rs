@@ -120,8 +120,10 @@ impl Index {
                 break;
             };
 
+            // TODO: iterate over ref messages.
+
             // Iterate over stored messages.
-            for message in block.messages() {
+            for message in block.inline_messages() {
                 #[cfg(feature = "tracing")]
                 tracing::debug!(
                     root_block = root_block.to_base64(),

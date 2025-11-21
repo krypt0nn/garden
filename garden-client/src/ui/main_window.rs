@@ -18,7 +18,9 @@
 
 use adw::prelude::*;
 use relm4::prelude::*;
+use relm4::{Worker, WorkerController};
 
+use flowerpot::crypto::hash::Hash;
 use flowerpot::crypto::sign::SigningKey;
 
 use garden_protocol::PostEvent;
@@ -28,6 +30,152 @@ use garden_protocol::handler::Handler;
 use crate::node::Progress as StartNodeProgress;
 
 use crate::ui::create_post_dialog::CreatePostDialog;
+
+#[derive(Debug, Clone)]
+enum MainWindowHandlerWorkerInput {
+    /// Set garden protocol handler.
+    SetHandler(Handler),
+
+    /// Request worker to update the garden index.
+    Update,
+
+    /// Send post to the network.
+    PublishPost {
+        signing_key: SigningKey,
+        event: PostEvent
+    },
+
+    /// Query posts since provided message hash.
+    QueryPosts {
+        since_message: Option<Hash>
+    }
+}
+
+#[derive(Debug, Clone)]
+enum MainWindowHandlerWorkerOutput {
+    /// Update main window status.
+    UpdateStatus(MainWindowStatus),
+
+    /// Queried post info.
+    Post(PostInfo)
+}
+
+struct MainWindowHandlerWorker {
+    handler: Option<Handler>
+}
+
+impl Worker for MainWindowHandlerWorker {
+    type Init = ();
+    type Input = MainWindowHandlerWorkerInput;
+    type Output = MainWindowHandlerWorkerOutput;
+
+    fn init(
+        _init: Self::Init,
+        sender: ComponentSender<Self>
+    ) -> Self {
+        // TODO: error handling.
+
+        let config = crate::config::read()
+            .expect("failed to read config");
+
+        std::thread::spawn(move || {
+            let address = config.blockchain_address.clone();
+
+            let handle = crate::node::start(&config, |progress| {
+                let _ = sender.output(
+                    MainWindowHandlerWorkerOutput::UpdateStatus(
+                        MainWindowStatus::Starting(progress)
+                    )
+                );
+            });
+
+            let handler = handle.expect("failed to start flowerpot node");
+
+            let handler = Handler::new(address, handler);
+
+            sender.input(MainWindowHandlerWorkerInput::SetHandler(handler));
+
+            let _ = sender.output(
+                MainWindowHandlerWorkerOutput::UpdateStatus(
+                    MainWindowStatus::Running
+                )
+            );
+
+            loop {
+                sender.input(MainWindowHandlerWorkerInput::Update);
+
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            }
+        });
+
+        Self {
+            handler: None
+        }
+    }
+
+    fn update(
+        &mut self,
+        message: Self::Input,
+        sender: ComponentSender<Self>
+    ) {
+        match message {
+            MainWindowHandlerWorkerInput::SetHandler(handler) => {
+                self.handler = Some(handler);
+            }
+
+            MainWindowHandlerWorkerInput::Update => {
+                #[allow(clippy::collapsible_if)]
+                if let Some(handler) = &self.handler {
+                    if let Err(err) = handler.update() {
+                        tracing::error!(?err, "failed to update garden handler");
+                    }
+                }
+            }
+
+            MainWindowHandlerWorkerInput::PublishPost {
+                signing_key,
+                event
+            } => {
+                if let Some(handler) = &self.handler {
+                    handler.send_post(&signing_key, event)
+                        .expect("failed to send post to the flowerpot network");
+                }
+            }
+
+            MainWindowHandlerWorkerInput::QueryPosts { since_message } => {
+                if let Some(handler) = &self.handler {
+                    let posts = handler.index()
+                        .posts()
+                        .skip_while(|post| {
+                            match &since_message {
+                                Some(since_message) => post.message_hash() != since_message,
+                                None => false
+                            }
+                        })
+                        .skip(if since_message.is_some() { 1 } else { 0 })
+                        .cloned()
+                        .collect::<Vec<_>>();
+
+                    for post in posts {
+                        if let Some(post) = handler.read_post(&post) {
+                            match post {
+                                Ok(post) => {
+                                    let _ = sender.output(MainWindowHandlerWorkerOutput::Post(post));
+                                }
+
+                                Err(err) => {
+                                    // TODO: error handling.
+
+                                    tracing::error!(?err, "failed to read post info");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 struct MainWindowPostFactory {
@@ -96,28 +244,33 @@ impl FactoryComponent for MainWindowPostFactory {
     }
 }
 
-pub enum HandlerStatus {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MainWindowStatus {
     /// Flowerpot node is not started and handler is not available.
     None,
 
     /// Starting the flowerpot node.
-    StartNode(StartNodeProgress),
+    Starting(StartNodeProgress),
 
     /// Handler is available.
-    Handler(Handler)
+    Running
 }
 
 #[derive(Debug, Clone)]
 pub enum MainWindowMsg {
-    StartHandler,
+    SetStatus(MainWindowStatus),
     SetSigningKey(SigningKey),
+    Update,
     OpenCreatePostDialog,
-    PublishPost(PostEvent)
+    PublishPost(PostEvent),
+    AddPost(PostInfo)
 }
 
 pub struct MainWindow {
-    handler: HandlerStatus,
+    status: MainWindowStatus,
     signing_key: Option<SigningKey>,
+
+    handler_worker: WorkerController<MainWindowHandlerWorker>,
 
     window: adw::ApplicationWindow,
     posts_factory: FactoryVecDeque<MainWindowPostFactory>,
@@ -153,7 +306,7 @@ impl SimpleComponent for MainWindow {
                 set_orientation: gtk::Orientation::Vertical,
 
                 #[watch]
-                set_visible: !matches!(model.handler, HandlerStatus::Handler(_)),
+                set_visible: model.status != MainWindowStatus::Running,
 
                 adw::HeaderBar,
 
@@ -161,11 +314,11 @@ impl SimpleComponent for MainWindow {
                     set_title: "Starting flowerpot node",
 
                     #[watch]
-                    set_description: match &model.handler {
-                        HandlerStatus::None |
-                        HandlerStatus::Handler(_) => Some(String::new()),
+                    set_description: match &model.status {
+                        MainWindowStatus::None |
+                        MainWindowStatus::Running => Some(String::new()),
 
-                        HandlerStatus::StartNode(progress) => {
+                        MainWindowStatus::Starting(progress) => {
                             match progress {
                                 StartNodeProgress::CreateTracker(path)
                                     => Some(format!("Open blockchain storage at {path:?}")),
@@ -196,7 +349,7 @@ impl SimpleComponent for MainWindow {
                 set_orientation: gtk::Orientation::Vertical,
 
                 #[watch]
-                set_visible: matches!(model.handler, HandlerStatus::Handler(_)),
+                set_visible: model.status == MainWindowStatus::Running,
 
                 adw::HeaderBar {
                     pack_end = &gtk::Button {
@@ -235,8 +388,20 @@ impl SimpleComponent for MainWindow {
         sender: ComponentSender<Self>
     ) -> ComponentParts<Self> {
         let model = Self {
-            handler: HandlerStatus::None,
+            status: MainWindowStatus::None,
             signing_key: None,
+
+            handler_worker: MainWindowHandlerWorker::builder()
+                .detach_worker(())
+                .forward(sender.input_sender(), |message| {
+                    match message {
+                        MainWindowHandlerWorkerOutput::UpdateStatus(status) =>
+                            MainWindowMsg::SetStatus(status),
+
+                        MainWindowHandlerWorkerOutput::Post(post)
+                            => MainWindowMsg::AddPost(post)
+                    }
+                }),
 
             window: root.clone(),
 
@@ -253,6 +418,14 @@ impl SimpleComponent for MainWindow {
 
         let widgets = view_output!();
 
+        std::thread::spawn(move || {
+            loop {
+                sender.input(MainWindowMsg::Update);
+
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            }
+        });
+
         ComponentParts { model, widgets }
     }
 
@@ -262,51 +435,22 @@ impl SimpleComponent for MainWindow {
         _sender: ComponentSender<Self>
     ) {
         match message {
-            MainWindowMsg::StartHandler => {
-                let (send, recv) = std::sync::mpsc::channel();
-
-                // TODO: error handling.
-
-                let config = crate::config::read()
-                    .expect("failed to read config");
-
-                let root_block = config.blockchain_root_block;
-
-                let handle = std::thread::spawn(move || {
-                    crate::node::start(&config, |progress| {
-                        let _ = send.send(HandlerStatus::StartNode(progress));
-                    })
-                });
-
-                while let Ok(status) = recv.recv() {
-                    self.handler = status;
-                }
-
-                let handler = handle.join()
-                    .expect("failed to join flowerpot node starting thread")
-                    .expect("failed to start flowerpot node");
-
-                let handler = Handler::new(root_block, handler);
-
-                {
-                    let handler = handler.clone();
-
-                    std::thread::spawn(move || {
-                        loop {
-                            if let Err(err) = handler.update() {
-                                panic!("failed to update indexer: {err}");
-                            }
-
-                            std::thread::sleep(std::time::Duration::from_secs(5));
-                        }
-                    });
-                }
-
-                self.handler = HandlerStatus::Handler(handler);
+            MainWindowMsg::SetStatus(status) => {
+                self.status = status;
             }
 
             MainWindowMsg::SetSigningKey(signing_key) => {
                 self.signing_key = Some(signing_key);
+            }
+
+            MainWindowMsg::Update => {
+                let last_post = self.posts_factory.guard()
+                    .get(0)
+                    .map(|post| post.post.message_hash);
+
+                self.handler_worker.emit(MainWindowHandlerWorkerInput::QueryPosts {
+                    since_message: last_post
+                });
             }
 
             MainWindowMsg::OpenCreatePostDialog => {
@@ -315,14 +459,17 @@ impl SimpleComponent for MainWindow {
             }
 
             MainWindowMsg::PublishPost(event) => {
-                if let Some(signing_key) = &self.signing_key
-                    && let HandlerStatus::Handler(handler) = &self.handler
-                {
-                    // TODO: handle error.
-
-                    handler.send_post(signing_key, event)
-                        .expect("failed to send post to the flowerpot network");
+                if let Some(signing_key) = self.signing_key.clone() {
+                    self.handler_worker.emit(MainWindowHandlerWorkerInput::PublishPost {
+                        signing_key,
+                        event
+                    });
                 }
+            }
+
+            MainWindowMsg::AddPost(post) => {
+                self.posts_factory.guard()
+                    .push_front(post);
             }
         }
     }

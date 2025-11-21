@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
 
 use rand_chacha::ChaCha20Rng;
@@ -30,7 +30,6 @@ use flowerpot::protocol::network::{
     PacketStream, PacketStreamOptions, PacketStreamEncryption
 };
 use flowerpot::node::{Node, NodeOptions, NodeHandler};
-use flowerpot::node::tracker::Tracker;
 
 use crate::config::Config;
 
@@ -40,7 +39,7 @@ pub enum Progress {
     CreateTracker(PathBuf),
 
     /// Establish connection with another flowepot node.
-    EstablishConnection(SocketAddr),
+    EstablishConnection(String),
 
     /// Synchronize flowerpot blockchain.
     SynchronizeBlockchain,
@@ -68,20 +67,14 @@ pub fn start(
 
     // Attach blockchain storage.
     let storage_path = crate::STORAGES_FOLDER_PATH
-        .join(format!("{}.db", config.blockchain_root_block.to_base64()));
+        .join(format!("{}.db", config.blockchain_address.to_base64()));
 
     progress(Progress::CreateTracker(storage_path.clone()));
 
     let storage = SqliteStorage::open(storage_path)
         .context("failed to open flowerpot blockchain storage")?;
 
-    let tracker = Tracker::from_storage(storage);
-
-    node.add_tracker(
-        tracker,
-        Some(config.blockchain_root_block),
-        Some(config.blockchain_verifying_key.clone())
-    );
+    node = node.add_storage(config.blockchain_address.clone(), storage);
 
     // Generate ECDH secret key.
     let mut rng = ChaCha20Rng::from_entropy();
@@ -106,24 +99,10 @@ pub fn start(
 
     // Establish connections.
     for address in &config.node_bootstrap {
-        let addresses = address.to_socket_addrs()
-            .context("failed to lookup bootstrap node addresses")?;
+        progress(Progress::EstablishConnection(address.clone()));
 
-        for address in addresses {
-            // TODO: errors logging.
-
-            progress(Progress::EstablishConnection(address));
-
-            let Ok(stream) = TcpStream::connect(address) else {
-                continue;
-            };
-
-            let Ok(stream) = PacketStream::init(&secret_key, &options, stream) else {
-                continue;
-            };
-
-            node.add_stream(stream);
-        }
+        // TODO: handle error
+        let _ = node.init_stream(&secret_key, &options, address);
     }
 
     // Sync the node.

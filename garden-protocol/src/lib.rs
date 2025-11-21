@@ -16,8 +16,8 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-use flowerpot::crypto::hash::Hash;
 use flowerpot::crypto::sign::VerifyingKey;
+use flowerpot::address::Address;
 use flowerpot::message::Message;
 
 mod post;
@@ -177,7 +177,7 @@ impl From<ReactionEvent> for Events {
 /// return `true` on success.
 #[inline]
 pub fn messages_filter(
-    _root_block: &Hash,
+    _address: &Address,
     message: &Message,
     _author: &VerifyingKey
 ) -> bool {

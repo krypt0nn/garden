@@ -304,8 +304,6 @@ impl SimpleComponent for LoginWindow {
                 self.main_window.widget().present();
 
                 self.window.close();
-
-                self.main_window.emit(MainWindowMsg::StartHandler);
             }
         }
     }

@@ -343,16 +343,14 @@ checksum = "3a3076410a55c90011c298b04d0cfa770b00fa04e1e3c97d3f6c9de105a03844"
 [[package]]
 name = "flowerpot"
 version = "0.1.0"
-source = "git+https://github.com/krypt0nn/flowerpot#d6574f1436f0cb69da8370a501d968c5b4364c45"
+source = "git+https://github.com/krypt0nn/flowerpot#8d94df7fcde4aec2caf1844e62e10de2138acf6b"
 dependencies = [
  "base64",
  "blake3",
  "chacha20",
  "constant_time_eq 0.4.2",
- "flume",
  "k256",
  "rusqlite",
- "spin 0.10.0",
  "thiserror",
  "time",
  "tracing",

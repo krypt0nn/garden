@@ -20,8 +20,8 @@ use std::sync::Arc;
 
 use spin::{RwLock, RwLockReadGuard};
 
-use flowerpot::crypto::hash::Hash;
 use flowerpot::crypto::sign::{SigningKey, SignatureError};
+use flowerpot::address::Address;
 use flowerpot::message::Message;
 use flowerpot::node::NodeHandler;
 
@@ -36,8 +36,8 @@ use super::{Events, PostEvent, CommentEvent};
 /// and query data.
 #[derive(Clone)]
 pub struct Handler {
-    /// Root block hash of the garden protocol blockchain.
-    root_block: Arc<Hash>,
+    /// Garden protocol blockchain address.
+    address: Arc<Address>,
 
     /// Flowerpot node handler.
     node: NodeHandler,
@@ -49,17 +49,23 @@ pub struct Handler {
 impl Handler {
     /// Create new garden handler from provided flowerpot node handler and hash
     /// of the root block of a blockchain where garden protocol is stored.
-    pub fn new(root_block: impl Into<Hash>, node: NodeHandler) -> Self {
+    pub fn new(address: impl Into<Address>, node: NodeHandler) -> Self {
         Self {
-            root_block: Arc::new(root_block.into()),
+            address: Arc::new(address.into()),
             node,
             index: Arc::new(RwLock::new(Index::default()))
         }
     }
 
+    /// Get reference to the garden protocol blockchain address.
+    #[inline]
+    pub const fn address(&self) -> &Arc<Address> {
+        &self.address
+    }
+
     /// Get reference to the flowerpot node handler.
     #[inline]
-    pub const fn node_handler(&self) -> &NodeHandler {
+    pub const fn node(&self) -> &NodeHandler {
         &self.node
     }
 
@@ -73,11 +79,8 @@ impl Handler {
     pub fn update(&self) -> Result<(), IndexUpdateError> {
         let mut index = self.index.write();
 
-        let result = self.node.map_tracker(&self.root_block, move |_, tracker| {
-            match tracker.storage() {
-                Some(storage) => index.update(storage),
-                None => Ok(())
-            }
+        let result = self.node.map_storage(&self.address, move |storage| {
+            index.update(storage)
         });
 
         match result {
@@ -88,33 +91,31 @@ impl Handler {
 
     /// Try to read indexed garden post info.
     ///
-    /// Return `None` if underflying flowerpot blockchain tracker doesn't have
-    /// a storage or there's no tracker for a blockchain with provided root
-    /// block hash.
+    /// Return `None` if there's no storage for a blockchain with provided
+    /// address.
     ///
     /// Otherwise `Some(..)` with post reading result is returned.
     pub fn read_post(
         &self,
         post: &PostIndex
     ) -> Option<Result<PostInfo, IndexReadError>> {
-        self.node.map_tracker(&self.root_block, |_, tracker| {
-            Some(post.read(tracker.storage()?))
+        self.node.map_storage(&self.address, |storage| {
+            Some(post.read(storage))
         }).flatten()
     }
 
     /// Try to read indexed garden comment info.
     ///
-    /// Return `None` if underflying flowerpot blockchain tracker doesn't have
-    /// a storage or there's no tracker for a blockchain with provided root
-    /// block hash.
+    /// Return `None` if there's no storage for a blockchain with provided
+    /// address.
     ///
     /// Otherwise `Some(..)` with comment reading result is returned.
     pub fn read_comment(
         &self,
         comment: &CommentIndex
     ) -> Option<Result<CommentInfo, IndexReadError>> {
-        self.node.map_tracker(&self.root_block, |_, tracker| {
-            Some(comment.read(tracker.storage()?))
+        self.node.map_storage(&self.address, |storage| {
+            Some(comment.read(storage))
         }).flatten()
     }
 
@@ -127,7 +128,7 @@ impl Handler {
     ) -> Result<(), SignatureError> {
         let message = Message::create(signing_key, event.to_bytes())?;
 
-        self.node.send_message(self.root_block.as_ref(), message);
+        self.node.send_message(self.address.as_ref().clone(), message);
 
         Ok(())
     }
@@ -158,7 +159,7 @@ impl Handler {
 impl std::fmt::Debug for Handler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Handler")
-            .field("root_block", &self.root_block.to_base64())
+            .field("address", &self.address.to_base64())
             .finish()
     }
 }
